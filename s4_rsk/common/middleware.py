@@ -1,5 +1,6 @@
 import contextvars
 import logging
+
 from uuid6 import uuid7
 
 # Context variable to hold correlation_id across the request lifecycle
