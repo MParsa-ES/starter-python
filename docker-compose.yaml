@@ -22,7 +22,7 @@ services:
     container_name: s4-rsk
     restart: unless-stopped
     env_file:
-      - s4_rsk/.env.example
+      - s4_rsk/.env
     environment:
       POSTGRES_HOST: s4-rsk-db
       POSTGRES_PORT: 5432

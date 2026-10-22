@@ -1,33 +1,29 @@
-from urllib.parse import parse_qs, urlparse
+import re
 
-from rest_framework.pagination import CursorPagination
-from rest_framework.response import Response
+from rest_framework import serializers
+
+IBAN_REGEX = re.compile(r"^IR\d{24}$")
 
 
-class LabBankCursorPagination(CursorPagination):
+def validate_iranian_iban(value: str) -> str:
     """
-    GEN-09: Lists are paginated with limit (max 200) and cursor,
-    and the response includes next_cursor.
+    GEN-13: Validates IR + 24 digits format and ISO 13616 Modulo-97 checksum.
     """
-
-    page_size = 50
-    page_size_query_param = "limit"
-    max_page_size = 200
-    cursor_query_param = "cursor"
-    ordering = "-created_at"
-
-    def get_paginated_response(self, data):
-        next_link = self.get_next_link()
-        next_cursor = None
-        if next_link:
-            parsed = urlparse(next_link)
-            cursor_values = parse_qs(parsed.query).get(self.cursor_query_param)
-            if cursor_values:
-                next_cursor = cursor_values[0]
-
-        return Response(
-            {
-                "items": data,
-                "next_cursor": next_cursor,
-            }
+    if not value or not IBAN_REGEX.match(value):
+        raise serializers.ValidationError(
+            "IBAN must start with 'IR' followed by exactly 24 digits."
         )
+
+    # ISO 13616 Modulo-97 verification (I=18, R=27)
+    rearranged = value[4:] + "1827" + value[2:4]
+    if int(rearranged) % 97 != 1:
+        raise serializers.ValidationError("Invalid IBAN checksum (ISO 13616).")
+
+    return value
+
+
+def is_internal_labbank_iban(iban: str) -> bool:
+    """
+    GEN-13: Digits 5 to 7 (index 4:7) being '699' indicate an internal LabBank account.
+    """
+    return len(iban) == 26 and iban[4:7] == "699"

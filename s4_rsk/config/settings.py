@@ -130,7 +130,7 @@ LOGGING = {
     },
     "formatters": {
         "json": {
-            "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
+            "()": "pythonjsonlogger.json.JsonFormatter",
             "format": "%(asctime)s %(levelname)s %(service)s %(correlation_id)s %(name)s %(message)s",
             "rename_fields": {
                 "asctime": "timestamp",

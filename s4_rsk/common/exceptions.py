@@ -16,7 +16,7 @@ from .middleware import get_correlation_id
 class LabBankAPIException(Exception):
     """Base domain exception for custom S4-RSK RFC 9457 errors (e.g., 409 CONFLICT)."""
 
-    def init(
+    def __init__(
         self,
         code: str,
         title: str,
