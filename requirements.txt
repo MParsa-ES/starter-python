@@ -5,8 +5,10 @@ asgiref==3.12.1
 attrs==26.1.0
 certifi==2026.10.19
 click==8.5.0
+# Core Framework
 Django==5.1.15
 djangorestframework==3.17.2
+# OpenAPI 3.1 Documentation
 drf-spectacular==0.30.0
 fastapi==0.141.1
 h11==0.16.0
@@ -16,6 +18,7 @@ idna==3.20
 inflection==0.5.1
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
+# Database
 psycopg==3.3.6
 psycopg-binary==3.3.6
 pydantic==2.13.5

@@ -1,0 +1,18 @@
+# Default owners for the entire repository
+* @MParsa-ES @ali-github-username @abolfazl-github-username
+
+# Common infrastructure, Middlewares, Idempotency & RFC 9457 Exceptions
+/common/ @MParsa-ES
+
+# Core Risk Assessment API & Manual Review Queue Workflow
+/assessments/ @MParsa-ES @abolfazl-github-username
+/reviews/ @MParsa-ES @abolfazl-github-username
+
+# Dynamic Rule Engine, Blocklist & OpenAPI Contracts
+/rules/ @ali-github-username @abolfazl-github-username
+
+# Database, Docker & DevOps Configuration
+/Dockerfile @abolfazl-github-username @MParsa-ES
+/docker-compose.yml @abolfazl-github-username @MParsa-ES
+/.env.example @abolfazl-github-username
+/config/ @MParsa-ES @ali-github-username

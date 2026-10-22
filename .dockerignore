@@ -12,3 +12,8 @@ target
 .env.*
 README.md
 scripts
+.pytest_cache
+.ruff_cache
+*.pyc
+*.pyo
+*.pyd

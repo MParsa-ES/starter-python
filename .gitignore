@@ -8,5 +8,12 @@
 Thumbs.db
 *.log
 .venv/
+venv/
 __pycache__/
 *.py[cod]
+*$py.class
+
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
