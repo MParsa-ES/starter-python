@@ -38,3 +38,7 @@ uvicorn==0.52.4
 
 django-environ
 gunicorn>=23.0.0
+ruff>=0.6.9
+pytest>=8.3.3
+pytest-django>=4.9.0
+model-bakery>=1.19.5
