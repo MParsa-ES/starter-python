@@ -1,7 +1,7 @@
 # Local settings and credentials
 .env
-.env.*
-!.env.example
+s4_rsk/.env.example
+!s4_rsk/.env.example
 .idea/
 .vscode/
 .DS_Store

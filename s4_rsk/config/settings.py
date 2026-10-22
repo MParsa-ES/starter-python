@@ -1,9 +1,7 @@
 from pathlib import Path
 from zoneinfo import ZoneInfo
-import environ
-
-BASE_DIR = Path(file).resolve().parent.parent
-
+import  environ
+BASE_DIR = Path(__file__).resolve().parent.parent
 # GEN-12: Load configuration from environment variables
 env = environ.Env(
     DEBUG=(bool, False),

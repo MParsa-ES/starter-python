@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
+cd s4_rsk
+
 echo "Applying database migrations..."
 python manage.py migrate --noinput
 

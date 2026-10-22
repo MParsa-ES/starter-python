@@ -26,10 +26,10 @@ class CorrelationIdMiddleware:
     HEADER_NAME = "HTTP_X_CORRELATION_ID"
     RESPONSE_HEADER = "X-Correlation-ID"
 
-    def init(self, get_response):
+    def __init__(self, get_response):
         self.get_response = get_response
 
-    def call(self, request):
+    def __call__(self, request):
         incoming_cid = request.META.get(self.HEADER_NAME)
         correlation_id = incoming_cid.strip() if incoming_cid else str(uuid7())
 

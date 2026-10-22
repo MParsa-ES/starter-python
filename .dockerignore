@@ -9,7 +9,7 @@ target
 .vscode
 *.log
 .env
-.env.*
+s4_rsk/.env.example
 README.md
 scripts
 .pytest_cache
