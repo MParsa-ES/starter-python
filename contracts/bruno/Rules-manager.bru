@@ -1,0 +1,24 @@
+meta {
+  name: Rules - manager
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/risk-rules?limit=1
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: sessionid={{managerSessionId}}
+}
+
+tests {
+  test("Manager reads a cursor page", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().items).to.be.an("array");
+    expect(res.getBody()).to.have.property("next_cursor");
+    expect(res.getBody().items.length).to.be.at.most(1);
+  });
+}

@@ -1,0 +1,18 @@
+meta {
+  name: Rules - anonymous forbidden
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/risk-rules
+  body: none
+  auth: none
+}
+
+tests {
+  test("Anonymous session is rejected", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.getBody().code).to.equal("UNAUTHORIZED");
+  });
+}
