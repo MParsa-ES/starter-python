@@ -8,7 +8,7 @@ import urllib.request
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("base_url", nargs="?", default="http://127.0.0.1:8080")
+    parser.add_argument("base_url", nargs="?", default="http://127.0.0.1:8084")
     args = parser.parse_args()
     base = args.base_url.rstrip("/")
     # Ignore environment proxy settings for this local verification.
@@ -18,9 +18,9 @@ def main() -> int:
             status = response.status
             media_type = response.headers.get_content_type()
             body = json.loads(response.read())
-        if status != 200 or media_type != "application/json" or body != {"status": "ok"}:
+        if status != 200 or media_type != "application/json" or body != {"status": "UP", "service": "s4-rsk"}:
             raise ValueError(f"Unexpected response: {status}, {media_type}, {body!r}")
-        print('PASS: GET /health -> 200 application/json {"status":"ok"}')
+        print('PASS: GET /health -> 200 application/json {"status":"UP","service":"s4-rsk"}')
         request = urllib.request.Request(base + "/health", method="POST", data=b"")
         try:
             with opener.open(request, timeout=5) as response:

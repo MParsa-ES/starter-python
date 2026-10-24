@@ -1,149 +1,102 @@
-# Python Starter Service
+# LabBank S4-RSK
 
-A minimal, independent starter repository for Session 01 of the Software Engineering Lab.
-The task is to run the same health endpoint on every team member's computer.
-No database, authentication, or external service is required.
+The official service is **Django + Django REST Framework on port 8084**, backed
+by PostgreSQL. `main.py` is the historical Session 01 FastAPI exercise; it is
+preserved as course evidence and is not the service entry point. Do not use
+`uvicorn main:app` to run S4-RSK.
 
-## Requirements
+## First run (PowerShell, repository root)
 
-- Python 3.12.x and pip. Direct dependencies are pinned; transitive dependencies are resolved by pip.
-- Git to clone and push the repository.
-- Internet access for the first dependency download.
-- Docker is optional for running this service; use it only if you choose the Docker route below.
-
-## API contract
-
-| Item | Value |
-| --- | --- |
-| Method | `GET` |
-| Path | `/health` |
-| HTTP status | `200 OK` |
-| Content type | `application/json` (an optional charset is allowed) |
-| JSON body | `{"status":"ok"}` |
-| Local URL | `http://127.0.0.1:8080/health` |
-
-JSON whitespace is insignificant. Header order and framework-specific headers may differ
-between languages. Error body formats are not part of the shared contract.
-`POST /health` returns 405; an unknown route returns 404.
-This endpoint checks that the application is responding, not the health of future dependencies.
-
-## Run locally
-
-Open a terminal in this repository's root, then run:
+Requirements: Python 3.12, Docker Desktop with Linux containers, Git.
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8080
+Copy-Item s4_rsk/.env.example s4_rsk/.env
+docker compose up -d s4-rsk-db
+.\.venv\Scripts\python.exe s4_rsk/manage.py migrate
+.\.venv\Scripts\python.exe s4_rsk/manage.py runserver 127.0.0.1:8084
 ```
 
-Keep that terminal open. Stop the server with `Ctrl+C`.
+Copy the env template only on first setup; preserve an existing local `.env`.
+For macOS/Linux use `python3.12 -m venv .venv`, `cp` and `.venv/bin/python`.
+The template credentials are for local development only. Never commit `.env`.
 
-On macOS or Linux:
+Both Compose services read `s4_rsk/.env`, so database name, user and password
+come from the same file. Host Django uses `localhost:5434`; container Django
+overrides only the network address to `s4-rsk-db:5432`. Keep the sample host
+port at 5434. Do not rely on a root `.env` to configure the database.
 
-```bash
-python3.12 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8080
-```
+If a pre-existing volume was initialized with different credentials, changing
+the env file does not rename its existing PostgreSQL role. Preserve that data
+and use matching credentials or arrange a deliberate database migration.
 
-Use `python3` instead of `python3.12` if it already points to Python 3.12.
-Calling the virtual environment's Python directly avoids activation and PowerShell execution-policy issues.
-Do not commit `.venv`. API documentation routes are disabled to keep this starter focused.
-
-## Check the service
-
-In a second terminal on Windows PowerShell:
+## Run the complete backend in Docker
 
 ```powershell
-curl.exe -i http://127.0.0.1:8080/health
+docker compose up --build -d
+docker compose ps
 ```
 
-On macOS or Linux:
+The entrypoint applies migrations then starts Gunicorn on 8084. Do not run the
+host server and container server on the same port at the same time. Stop with
+`docker compose stop`; restart with `docker compose start`. Do not use
+`docker compose down -v` when you need to preserve the database.
 
-```bash
-curl -i http://127.0.0.1:8080/health
-```
-
-Expect HTTP 200, JSON content type, and `{"status":"ok"}`.
-You can also open the URL in your browser.
-
-For an optional automated contract check, install Python 3.10+ and run:
-
-```bash
-python scripts/verify_health.py
-```
-
-On Windows, use `py scripts/verify_health.py` if `python` is not available;
-on macOS/Linux use `python3`. No extra Python packages are needed for this check.
-The server must already be running. The script checks GET, the rejected POST method,
-and an unknown route. It exits with a nonzero status on failure.
-
-## Run with Docker
-
-From the repository root:
-
-```bash
-docker build -t starter-python .
-docker run --rm -p 127.0.0.1:8080:8080 starter-python
-```
-
-The container listens on all container interfaces; the published port is restricted to
-localhost on your machine. Stop the foreground container with `Ctrl+C`.
-The Docker image is for a teaching starter; registry tags receive updates and are not digest-pinned.
-
-## Port conflicts
-
-Run only one starter on port 8080 at a time. Stop the previous server first.
-To use port 8081 with Docker, change the mapping to `127.0.0.1:8081:8080`.
-Then check `http://127.0.0.1:8081/health`.
-
-Local port override (PowerShell):
+## Verify and explore
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8081
+curl.exe -i http://127.0.0.1:8084/health
+curl.exe -i http://127.0.0.1:8084/ready
+.\.venv\Scripts\python.exe scripts/verify_health.py
 ```
 
-## Files to know
+`GET /health` returns `200 {"status":"UP","service":"s4-rsk"}` without querying
+the database. `/ready` queries PostgreSQL and returns
+`200 {"status":"READY","service":"s4-rsk","database":"CONNECTED"}` or
+503 `application/problem+json`. Both probes are public. Responses include
+`X-Correlation-ID`. Swagger is `/api/docs/`; schema is `/api/schema/`.
 
-- `main.py`: health endpoint implementation.
-- `Dockerfile`: optional container build and startup.
-- `.gitignore`: excludes generated files and local settings.
-- `scripts/verify_health.py`: optional black-box API verification.
+## Authentication baseline
 
-## Publish this starter as a new repository
+Management endpoints use Django sessions. Unsafe authenticated requests must
+include the CSRF cookie and `X-CSRFToken`. The `manager`, `operator` and
+`analyst` roles are Django groups; the initial rule list requires `manager`.
+The staff flag grants no API role by itself. See
+[ADR-001](docs/adr/ADR-001-authentication.md) for the exact 403 problem codes,
+same-origin UI contract and pending S3 authentication decision.
 
-Create an **empty** GitHub repository named `starter-python`. Do not initialize it with a README,
-license, or gitignore. From this extracted folder (which has no Git history), run:
+For local Swagger use, create an interactive account with
+`python s4_rsk/manage.py createsuperuser`, log into `/admin/login/`, create the
+`manager` group and explicitly assign it to that account. Do not store real
+passwords in fixtures or request collections. Production requires `DEBUG=False`,
+a non-development `SECRET_KEY`, HTTPS, correct `ALLOWED_HOSTS` and secure cookies.
 
-```bash
-git init -b main
-git add .
-git commit -m "Add minimal health service starter"
-git remote add origin https://github.com/YOUR_ORG/starter-python.git
-git push -u origin main
+## Tests and schema validation
+
+Use a dedicated test database/server; pytest creates a `test_` database and
+requires a PostgreSQL role with CREATEDB. Never point it at shared data.
+
+```powershell
+$env:POSTGRES_DB = 's4_rsk_test'
+$env:POSTGRES_USER = 's4_rsk_user'
+$env:POSTGRES_PASSWORD = 's4_rsk_password'
+$env:POSTGRES_HOST = '127.0.0.1'
+$env:POSTGRES_PORT = '15434'
+$env:DEBUG = 'True'
+docker run -d --name s4-rsk-ali-test-db -e POSTGRES_DB=s4_rsk_test -e POSTGRES_USER=s4_rsk_user -e POSTGRES_PASSWORD=s4_rsk_password -p 127.0.0.1:15434:5432 --tmpfs /var/lib/postgresql/data postgres:16-alpine
+Set-Location s4_rsk
+..\.venv\Scripts\python.exe manage.py check
+..\.venv\Scripts\python.exe manage.py makemigrations --check --dry-run
+..\.venv\Scripts\python.exe -m pytest
+..\.venv\Scripts\python.exe manage.py spectacular --validate --fail-on-warn --file ../contracts/openapi.yaml
+..\.venv\Scripts\ruff.exe check .
 ```
 
-Replace `YOUR_ORG` with your GitHub organization or account. Configure your own Git name
-and email first. These commands are for a new repository, not an existing working copy.
-After publishing, the repository can optionally be marked as a template in GitHub settings.
+If that test container already exists, start it rather than running `docker run`
+again. The tmpfs database is disposable and does not use the project's data
+volume. Remove the test-only environment overrides or open a fresh terminal
+before returning to the development service.
 
-## Session 01 completion checklist
-
-- [ ] Three team members and the chosen language are registered.
-- [ ] The unchanged starter code has been pushed to the team's `main` branch.
-- [ ] Every member can clone the team repository.
-- [ ] Every member gets the successful `/health` response locally.
-- [ ] The report includes the team repository URL and evidence of each member's successful run.
-
-## Troubleshooting
-
-- **Connection refused:** start the service and check its terminal output and port.
-- **Address already in use:** stop the other service or use the override above.
-- **404 on `/`:** expected; request `/health` instead.
-- **Dependency download failed:** check network/proxy access to the package registry.
-- **Command not found:** install the SDK/tool listed above and reopen the terminal.
-
-## Official reference
-
-[Python web service documentation](https://fastapi.tiangolo.com/tutorial/first-steps/)
+Frontend scaffolding and persistent idempotency remain separate work items;
+their existence is not implied by this backend baseline.
