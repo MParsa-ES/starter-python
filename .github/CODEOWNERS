@@ -1,18 +1,17 @@
-# Default owners for the entire repository
+# Fallback ownership; each area has at least two reviewers.
 * @MParsa-ES @AliJohari05 @Abolfazl-Tajik
-
-# Common infrastructure, Middlewares, Idempotency & RFC 9457 Exceptions
-/common/ @MParsa-ES    @AliJohari05 @Abolfazl-Tajik
-
-# Core Risk Assessment API & Manual Review Queue Workflow
-/assessments/ @MParsa-ES @Abolfazl-Tajik    @AliJohari05
-/reviews/ @MParsa-ES @Abolfazl-Tajik    @AliJohari05
-
-# Dynamic Rule Engine, Blocklist & OpenAPI Contracts
-/rules/ @AliJohari05 @Abolfazl-Tajik    @MParsa-ES
-
-# Database, Docker & DevOps Configuration
+/s4_rsk/common/ @Abolfazl-Tajik @MParsa-ES
+/s4_rsk/assessments/ @MParsa-ES @AliJohari05
+/s4_rsk/reviews/ @MParsa-ES @AliJohari05
+/s4_rsk/rules/ @AliJohari05 @Abolfazl-Tajik
+/s4_rsk/config/ @MParsa-ES @AliJohari05 @Abolfazl-Tajik
+/s4_rsk/.env.example @Abolfazl-Tajik @MParsa-ES
 /Dockerfile @Abolfazl-Tajik @MParsa-ES
-/docker-compose.yml @Abolfazl-Tajik @MParsa-ES    @AliJohari05
-/.env.example @Abolfazl-Tajik   @MParsa-ES @AliJohari05
-/config/ @MParsa-ES @AliJohari05   @Abolfazl-Tajik
+/docker-compose.yaml @Abolfazl-Tajik @MParsa-ES
+/.dockerignore @Abolfazl-Tajik @AliJohari05
+/.github/ @MParsa-ES @AliJohari05
+/frontend/ @AliJohari05 @Abolfazl-Tajik
+/contracts/ @AliJohari05 @MParsa-ES
+/docs/ @AliJohari05 @MParsa-ES @Abolfazl-Tajik
+# Last matching pattern wins: migrations require database review.
+/s4_rsk/**/migrations/ @Abolfazl-Tajik @AliJohari05 @MParsa-ES

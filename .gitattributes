@@ -1,6 +1,18 @@
-* text=auto
+* text=auto eol=lf
 *.sh text eol=lf
 *.go text eol=lf
 *.py text eol=lf
 *.java text eol=lf
 *.cs text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.docx binary
+*.pptx binary
+*.xlsx binary
+*.zip binary
+*.woff binary
+*.woff2 binary
