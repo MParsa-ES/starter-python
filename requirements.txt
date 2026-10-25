@@ -37,6 +37,7 @@ uuid6==2025.0.1
 uvicorn==0.52.4
 
 django-environ
+django-cors-headers>=4.4.0
 gunicorn>=23.0.0
 ruff>=0.6.9
 pytest>=8.3.3
