@@ -9,6 +9,9 @@ target
 .vscode
 *.log
 .env
+.env.*
+**/.env
+**/.env.*
 s4_rsk/.env.example
 README.md
 scripts
@@ -17,3 +20,18 @@ scripts
 *.pyc
 *.pyo
 *.pyd
+venv
+node_modules
+**/node_modules
+frontend/dist
+frontend/coverage
+htmlcov
+.coverage
+.work-docs
+deliverables
+منبع پروژه
+*.pdf
+*.docx
+*.pptx
+*.xlsx
+*.zip

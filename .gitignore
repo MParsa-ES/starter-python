@@ -1,7 +1,8 @@
 # Local settings and credentials
 .env
-s4_rsk/.env.example
-!s4_rsk/.env.example
+.env.*
+!.env.example
+!.env.*.example
 .idea/
 .vscode/
 .DS_Store
@@ -23,3 +24,11 @@ htmlcov/
 
 # Previous generated-output location (includes a currently locked Word file)
 /deliverables/
+
+# Frontend dependencies and generated output; commit the package lockfile.
+node_modules/
+/frontend/dist/
+/frontend/coverage/
+*.tsbuildinfo
+.vite/
+.work-docs/
