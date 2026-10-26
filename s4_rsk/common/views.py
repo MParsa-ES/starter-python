@@ -1,21 +1,46 @@
+from django.conf import settings
 from django.db import connections
 from django.db.utils import OperationalError
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    permission_classes,
+)
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .exceptions import LabBankAPIException
+from .schema import CORRELATION_HEADERS
+from .serializers import HealthSerializer, ProblemSerializer, ReadySerializer
 
 
+@extend_schema(
+    auth=[],
+    responses={200: HealthSerializer},
+    parameters=CORRELATION_HEADERS,
+)
 @api_view(["GET"])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def health_view(request):
     """GEN-10: Reports process liveness."""
-    return Response({"status": "UP", "service": "s4-rsk"}, status=status.HTTP_200_OK)
+    return Response(
+        {"status": "UP", "service": settings.SERVICE_NAME}, status=status.HTTP_200_OK
+    )
 
 
+@extend_schema(
+    auth=[],
+    responses={
+        200: ReadySerializer,
+        (503, "application/problem+json"): ProblemSerializer,
+    },
+    parameters=CORRELATION_HEADERS,
+)
 @api_view(["GET"])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def ready_view(request):
     """GEN-10: Reports readiness of dependencies (PostgreSQL database)."""
@@ -34,6 +59,6 @@ def ready_view(request):
         ) from exc
 
     return Response(
-        {"status": "READY", "service": "s4-rsk", "database": "CONNECTED"},
+        {"status": "READY", "service": settings.SERVICE_NAME, "database": "CONNECTED"},
         status=status.HTTP_200_OK,
     )

@@ -15,8 +15,15 @@ env_file = BASE_DIR / ".env"
 if env_file.exists():
     environ.Env.read_env(str(env_file))
 
-SECRET_KEY = env("SECRET_KEY", default="unsafe-dev-secret-key")
 DEBUG = env("DEBUG")
+SECRET_KEY = env("SECRET_KEY", default="unsafe-dev-secret-key" if DEBUG else None)
+if not DEBUG and (not SECRET_KEY or SECRET_KEY.startswith(("unsafe-", "django-insecure-"))):
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured("Set a non-development SECRET_KEY when DEBUG=False.")
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 SERVICE_NAME = env("SERVICE_NAME", default="s4-rsk")
 # CORS: origins allowed to call this API from a browser (frontend dev server)
@@ -85,7 +92,7 @@ DATABASES = {
         "USER": env("POSTGRES_USER", default="s4_rsk_user"),
         "PASSWORD": env("POSTGRES_PASSWORD", default="s4_rsk_password"),
         "HOST": env("POSTGRES_HOST", default="localhost"),
-        "PORT": env("POSTGRES_PORT", default="5432"),
+        "PORT": env("POSTGRES_PORT", default="5434"),
         "CONN_MAX_AGE": 60,
         "CONN_HEALTH_CHECKS": True,
     }
@@ -103,6 +110,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Django REST Framework Settings
 REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],

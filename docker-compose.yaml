@@ -3,16 +3,14 @@ services:
     image: postgres:16-alpine
     container_name: s4-rsk-db
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-s4_rsk_db}
-      POSTGRES_USER: ${POSTGRES_USER:-s4_rsk_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-s4_rsk_password}
+    env_file:
+      - s4_rsk/.env
     ports:
-      - "5434:5432" # Mapped to 5434 on host to avoid colliding with local Postgres
+      - "127.0.0.1:5434:5432"
     volumes:
       - s4_rsk_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-s4_rsk_user} -d ${POSTGRES_DB:-s4_rsk_db}"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
       timeout: 5s
       retries: 5

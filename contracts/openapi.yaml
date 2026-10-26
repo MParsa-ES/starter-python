@@ -1,0 +1,132 @@
+openapi: 3.1.0
+info:
+  title: LabBank S4-RSK (Risk & Fraud Decisioning) API
+  version: 1.0.0
+  description: Real-time transaction risk evaluation, dynamic rule engine, blocklist,
+    and manual review service.
+paths:
+  /health:
+    get:
+      operationId: health_retrieve
+      description: 'GEN-10: Reports process liveness.'
+      parameters:
+      - in: header
+        name: X-Correlation-ID
+        schema:
+          type: string
+        description: Optional request trace identifier; generated when absent.
+      tags:
+      - health
+      responses:
+        '200':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+          description: ''
+  /ready:
+    get:
+      operationId: ready_retrieve
+      description: 'GEN-10: Reports readiness of dependencies (PostgreSQL database).'
+      parameters:
+      - in: header
+        name: X-Correlation-ID
+        schema:
+          type: string
+        description: Optional request trace identifier; generated when absent.
+      tags:
+      - ready
+      responses:
+        '200':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ready'
+          description: ''
+        '503':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+components:
+  schemas:
+    DatabaseEnum:
+      enum:
+      - CONNECTED
+      type: string
+      description: '* `CONNECTED` - CONNECTED'
+    Health:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/HealthStatusEnum'
+        service:
+          type: string
+      required:
+      - service
+      - status
+    HealthStatusEnum:
+      enum:
+      - UP
+      type: string
+      description: '* `UP` - UP'
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+        detail:
+          type: string
+        correlation_id:
+          type: string
+      required:
+      - code
+      - correlation_id
+      - detail
+      - status
+      - title
+      - type
+    Ready:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/ReadyStatusEnum'
+        service:
+          type: string
+        database:
+          $ref: '#/components/schemas/DatabaseEnum'
+      required:
+      - database
+      - service
+      - status
+    ReadyStatusEnum:
+      enum:
+      - READY
+      type: string
+      description: '* `READY` - READY'

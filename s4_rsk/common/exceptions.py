@@ -29,7 +29,7 @@ class LabBankAPIException(Exception):
         self.detail = detail
         self.status_code = status_code
         self.type_slug = type_slug
-        super().init(detail)
+        super().__init__(detail)
 
 
 def rfc9457_exception_handler(exc, context):
