@@ -36,5 +36,15 @@ services:
       timeout: 5s
       retries: 3
 
+  s4-rsk-frontend:
+    build:
+      context: ./frontend
+    container_name: s4-rsk-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      s4-rsk:
+        condition: service_healthy
 volumes:
   s4_rsk_pgdata:
