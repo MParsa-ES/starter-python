@@ -26,6 +26,12 @@ SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 SERVICE_NAME = env("SERVICE_NAME", default="s4-rsk")
+# CORS: origins allowed to call this API from a browser (frontend dev server)
+CORS_ALLOWED_ORIGINS = env.list(
+    "CORS_ALLOWED_ORIGINS",
+    default=["http://localhost:5173", "http://127.0.0.1:5173"],
+)
+CORS_EXPOSE_HEADERS = ["X-Correlation-ID"]
 
 # Application definition
 INSTALLED_APPS = [
@@ -37,6 +43,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # Third-party apps
     "rest_framework",
+    "corsheaders",
     "drf_spectacular",
     # S4-RSK Local Apps
     "common",
@@ -47,6 +54,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "common.middleware.CorrelationIdMiddleware",  # GEN-08: Must be first
+    "corsheaders.middleware.CorsMiddleware",  # must be before CommonMiddleware
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",

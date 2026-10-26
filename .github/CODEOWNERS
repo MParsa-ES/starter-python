@@ -5,7 +5,7 @@
 /s4_rsk/reviews/ @MParsa-ES @AliJohari05
 /s4_rsk/rules/ @AliJohari05 @Abolfazl-Tajik
 /s4_rsk/config/ @MParsa-ES @AliJohari05 @Abolfazl-Tajik
-/s4_rsk/.env.example @Abolfazl-Tajik @MParsa-ES
+/s4_rsk/.env.example @Abolfazl-Tajik @MParsa-ES @AliJohari05
 /Dockerfile @Abolfazl-Tajik @MParsa-ES
 /docker-compose.yaml @Abolfazl-Tajik @MParsa-ES
 /.dockerignore @Abolfazl-Tajik @AliJohari05
