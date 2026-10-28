@@ -1,9 +1,10 @@
-from common.permissions import IsRiskManager
-from common.schema import CORRELATION_HEADERS
-from common.serializers import ProblemSerializer
 from drf_spectacular.utils import extend_schema
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
+
+from common.permissions import IsRiskManager
+from common.schema import CORRELATION_HEADERS
+from common.serializers import ProblemSerializer
 
 from .selectors import list_risk_rules
 from .serializers import RiskRuleSerializer
