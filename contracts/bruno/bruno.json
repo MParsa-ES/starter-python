@@ -1,0 +1,6 @@
+{
+  "version": "1",
+  "name": "S4-RSK acceptance",
+  "type": "collection",
+  "ignore": ["node_modules", ".git"]
+}

@@ -14,7 +14,17 @@ class LabBankCursorPagination(CursorPagination):
     page_size_query_param = "limit"
     max_page_size = 200
     cursor_query_param = "cursor"
-    ordering = "-created_at"
+    ordering = ("-created_at", "-id")
+
+    def get_paginated_response_schema(self, schema):
+        return {
+            "type": "object",
+            "required": ["items", "next_cursor"],
+            "properties": {
+                "items": schema,
+                "next_cursor": {"type": ["string", "null"]},
+            },
+        }
 
     def get_paginated_response(self, data):
         next_link = self.get_next_link()
