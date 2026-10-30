@@ -45,7 +45,7 @@ class RiskAssessment(models.Model):
         db_index=True,
     )
 
-    occured_at = models.DateTimeField(
+    occurred_at = models.DateTimeField(
         help_text="Date and time at which the transaction occured in S3-Pay"
     )
 
@@ -97,8 +97,8 @@ class RiskAssessment(models.Model):
             ),
         ]
 
-        def __str__(self):
-            return f"Assessment {self.decision_id} (tx={self.transacction_id}) -> {self.decision}"
+    def __str__(self):
+        return f"Assessment {self.decision_id} (tx={self.transaction_id}) -> {self.decision}"
 
 
 class DecisionReason(models.Model):

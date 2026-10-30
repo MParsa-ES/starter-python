@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
                 ('currency', models.CharField(default='IRR', max_length=3)),
                 ('source_iban', models.CharField(db_index=True, max_length=26)),
                 ('destination_iban', models.CharField(db_index=True, max_length=26)),
-                ('occured_at', models.DateTimeField(help_text='Date and time at which the transaction occured in S3-Pay')),
+                ('occurred_at', models.DateTimeField(help_text='Date and time at which the transaction occured in S3-Pay')),
                 ('input_fingerpring', models.CharField(help_text='SHA-256 hash of the assessment request payload', max_length=64)),
                 ('decision', models.CharField(choices=[('APPROVE', 'Approve'), ('REJECT', 'Reject'), ('REVIEW', 'Review')], db_index=True, max_length=10)),
                 ('evaluated_at', models.DateTimeField(auto_now_add=True, db_index=True, help_text='Timestamp when S4-RSK evaluated the transaction')),
