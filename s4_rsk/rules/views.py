@@ -19,7 +19,8 @@ class RiskRuleListView(ListAPIView):
 
     @extend_schema(
         operation_id="risk_rules_list",
-        description="List stored rule configuration, including disabled and future rules. Requires the manager group; this endpoint does not evaluate rules.",
+        description="List stored rule configuration, including disabled and future rules. Requires the manager group;"
+                    " this endpoint does not evaluate rules.",
         parameters=CORRELATION_HEADERS,
         responses={
             200: RiskRuleSerializer(many=True),
