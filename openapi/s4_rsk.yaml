@@ -45,6 +45,11 @@ paths:
         active rules and the blocklist, stores the decision with its reasons and returns it.
         The same `Idempotency-Key` with the same body replays the original 201 response; the same key
         with a different body is rejected with 409 `IDEMPOTENCY_KEY_REUSED`.
+
+        When `source_account_id` is present, S4-RSK may read the recent debits of that account from
+        S2-LDG (`GET /accounts/{id}/entries`) to detect unusual behavior. If S2-LDG answers 404 or does
+        not answer in time, the decision is `REVIEW` with reason `ACCOUNT_NOT_FOUND` or `LEDGER_UNAVAILABLE`.
+        When it is absent, that history check is skipped.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/CorrelationId'
@@ -59,6 +64,7 @@ paths:
               amount: 2500000
               currency: IRR
               source_iban: IR080540102680020817909002
+              source_account_id: 0192f5a0-5555-7aaa-8bbb-0123456789ab
               destination_iban: IR640170000000123456789012
               occurred_at: '2026-10-24T08:30:00Z'
       responses:
@@ -778,6 +784,12 @@ components:
           enum: [IRR]
         source_iban:
           $ref: '#/components/schemas/Iban'
+        source_account_id:
+          type: string
+          format: uuid
+          description: |
+            Optional. Ledger account identifier of the source IBAN, known to S3-PAY. Lets S4-RSK read the
+            account's recent debits from S2-LDG. When absent the history check is skipped.
         destination_iban:
           $ref: '#/components/schemas/Iban'
           description: Must differ from `source_iban`.
