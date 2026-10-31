@@ -2,7 +2,6 @@ import hashlib
 import json
 from uuid import UUID
 
-from common.middleware import get_correlation_id
 from django.db import transaction
 
 from assessments.models import (
@@ -12,6 +11,7 @@ from assessments.models import (
     EventType,
     RiskAssessment,
 )
+from common.middleware import get_correlation_id
 
 DEFAULT_APPROVE_CODE = "NO_RULE_MATCHED"
 DEFAULT_APPROVE_MESSAGE = "No blocking rule matched"

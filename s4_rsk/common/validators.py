@@ -2,7 +2,7 @@ import re
 
 from rest_framework import serializers
 
-IBAN_REGEX = re.compile(r"^IR\d{24}$")
+IBAN_REGEX = re.compile(r"^IR[0-9]{24}$")
 
 
 def validate_iranian_iban(value: str) -> str:

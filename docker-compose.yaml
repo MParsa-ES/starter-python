@@ -21,6 +21,8 @@ services:
     restart: unless-stopped
     env_file:
       - s4_rsk/.env
+    volumes:
+      - .:/app
     environment:
       POSTGRES_HOST: s4-rsk-db
       POSTGRES_PORT: 5432

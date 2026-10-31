@@ -1,7 +1,9 @@
-from datetime import timezone
+from datetime import UTC
+
+from django.utils.dateparse import parse_datetime
+from rest_framework import serializers
 
 from common.validators import validate_iranian_iban
-from rest_framework import serializers
 
 MAX_INT64 = 9_223_372_036_854_775_807
 
@@ -65,11 +67,14 @@ class RiskAssessmentRequestSerializer(serializers.Serializer):
         """
         Ensure timestamp includes timezone info and is normalized to UTC (GEN-05).
         """
-        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
-            raise serializers.ValidationError(
-                "occurred_at must include timezone information (UTC ISO-8601)."
-            )
-        return value.astimezone(timezone.utc)
+        raw_value = self.initial_data.get('occurred_at')
+        if isinstance(raw_value, str):
+            parsed = parse_datetime(raw_value)
+            if parsed is not None and (parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None):
+                raise serializers.ValidationError(
+                    "occurred_at must include explicit timezone information (e.g., 'Z' or '+00:00')."
+                )
+        return value.astimezone(UTC)
 
     def validate(self, attrs: dict) -> dict:
         """

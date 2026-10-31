@@ -1,0 +1,27 @@
+# Target Python 3.12 as mandated by the S4-RSK team standard
+target-version = "py312"
+line-length = 120
+
+# Exclude auto-generated Django migrations, virtualenvs, and frontend build artifacts
+extend-exclude = [
+    "**/migrations/*.py",
+    ".venv",
+    "venv",
+    "frontend",
+    "node_modules",
+]
+
+[lint]
+# Enable standard flake8, pycodestyle, isort, and ruff rules
+select = ["E", "F", "I", "W", "RUF"]
+
+# RUF012: Django Models (Meta.ordering, Meta.constraints, Meta.indexes) and DRF Views/Serializers
+# rely on class-level lists/dicts by design without typing.ClassVar.
+# EXE002: Ignore file executable bit mismatches inside Docker bind mounts (Section 2 of team plan).
+ignore = [
+    "RUF012",
+    "EXE002",
+]
+
+[lint.isort]
+known-first-party = ["config", "common", "assessments", "rules", "reviews", "integrations", "notifications"]

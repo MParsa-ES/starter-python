@@ -49,7 +49,7 @@ class RiskAssessment(models.Model):
         help_text="Date and time at which the transaction occured in S3-Pay"
     )
 
-    input_fingerpring = models.CharField(
+    input_fingerprint = models.CharField(
         max_length=64, help_text="SHA-256 hash of the assessment request payload"
     )
 
