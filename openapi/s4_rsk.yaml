@@ -1,0 +1,1148 @@
+openapi: 3.1.0
+info:
+  title: LabBank S4-RSK (Risk & Fraud Decisioning) API
+  version: 1.0.0
+  description: |
+    Contract of the S4-RSK service. This file is the source of truth (First-Contract):
+    the Django implementation must match it.
+
+    Conventions (LabBank project document, section 3): all paths live under `/api/v1`
+    (except `/health` and `/ready`), money is an int64 amount in IRR, identifiers are UUIDs,
+    timestamps are ISO 8601 in UTC, errors are RFC 9457 `application/problem+json` with a `code`,
+    every mutating POST accepts `Idempotency-Key`, lists use `limit` (max 200) and `cursor`,
+    and field names are snake_case.
+
+    Authentication (ADR-001): Django session. A missing/invalid session and a missing role both
+    return 403; clients tell them apart by the problem `code` (`UNAUTHORIZED` or `FORBIDDEN`).
+servers:
+  - url: http://localhost:8084/api/v1
+    description: Local development
+security:
+  - sessionAuth: []
+tags:
+  - name: Risk Assessments
+    description: Evaluate a transfer and read persisted decisions (loop endpoint with S3-PAY).
+  - name: Risk Rules
+    description: Risk rule configuration (manager only).
+  - name: Blocked Identifiers
+    description: Blocklist of IBANs.
+  - name: Manual Review
+    description: Queue of REVIEW decisions handled by operators.
+  - name: Statistics
+    description: Dashboard numbers for risk managers.
+  - name: Deliveries
+    description: Delivery of decisions to S3-PAY.
+  - name: Operations
+    description: Liveness and readiness probes.
+paths:
+  /risk-assessments:
+    post:
+      tags: [Risk Assessments]
+      operationId: createRiskAssessment
+      summary: Evaluate a transfer and persist the initial decision
+      description: |
+        Called by S3-PAY before executing a transfer. S4-RSK evaluates the transfer against the
+        active rules and the blocklist, stores the decision with its reasons and returns it.
+        The same `Idempotency-Key` with the same body replays the original 201 response; the same key
+        with a different body is rejected with 409 `IDEMPOTENCY_KEY_REUSED`.
+
+        When `source_account_id` is present, S4-RSK may read the recent debits of that account from
+        S2-LDG (`GET /accounts/{id}/entries`) to detect unusual behavior. If S2-LDG answers 404 or does
+        not answer in time, the decision is `REVIEW` with reason `ACCOUNT_NOT_FOUND` or `LEDGER_UNAVAILABLE`.
+        When it is absent, that history check is skipped.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskAssessmentRequest'
+            example:
+              transaction_id: 0192f5a0-7c1e-7d3a-9b2f-3c4d5e6f7a8b
+              amount: 2500000
+              currency: IRR
+              source_iban: IR080540102680020817909002
+              source_account_id: 0192f5a0-5555-7aaa-8bbb-0123456789ab
+              destination_iban: IR640170000000123456789012
+              occurred_at: '2026-10-24T08:30:00Z'
+      responses:
+        '201':
+          description: Decision created (or replayed for a repeated Idempotency-Key).
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskAssessment'
+              example:
+                decision_id: 0192f5a0-8a11-7b6c-8e4d-1a2b3c4d5e6f
+                transaction_id: 0192f5a0-7c1e-7d3a-9b2f-3c4d5e6f7a8b
+                decision: APPROVE
+                evaluated_at: '2026-10-24T08:30:01Z'
+                reasons:
+                  - code: NO_RULE_MATCHED
+                    message: No active rule matched this transaction.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /risk-assessments/{decision_id}:
+    get:
+      tags: [Risk Assessments]
+      operationId: getRiskAssessmentById
+      summary: Read a persisted decision with its transaction context
+      parameters:
+        - name: decision_id
+          in: path
+          required: true
+          description: Identifier returned by createRiskAssessment.
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: The decision, its reasons and the evaluated transaction.
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/XCorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskAssessmentDetail'
+              example:
+                decision_id: 0192f5a0-8a11-7b6c-8e4d-1a2b3c4d5e6f
+                transaction_id: 0192f5a0-7c1e-7d3a-9b2f-3c4d5e6f7a8b
+                decision: APPROVE
+                evaluated_at: '2026-10-24T08:30:01Z'
+                reasons:
+                  - code: NO_RULE_MATCHED
+                    message: No active rule matched this transaction.
+                amount: 2500000
+                currency: IRR
+                source_iban: IR080540102680020817909002
+                destination_iban: IR640170000000123456789012
+                occurred_at: '2026-10-24T08:30:00Z'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /transactions/{transaction_id}/decisions:
+    get:
+      tags: [Risk Assessments]
+      operationId: listTransactionDecisions
+      summary: Append-only decision history of one transaction
+      description: Initial automatic evaluation followed by manual operator decisions, oldest first.
+      parameters:
+        - name: transaction_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: A page of decision events.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionEventPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /decision-events:
+    get:
+      tags: [Risk Assessments]
+      operationId: searchDecisionEvents
+      summary: Bounded search over decision events
+      parameters:
+        - name: decision
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/Decision'
+        - name: from
+          in: query
+          required: false
+          description: Inclusive lower bound, ISO 8601 UTC.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Exclusive upper bound, ISO 8601 UTC.
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of decision events.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionEventPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /risk-rules:
+    get:
+      tags: [Risk Rules]
+      operationId: risk_rules_list
+      summary: List stored risk rules
+      description: Includes disabled and future rules. Requires the `manager` group; it does not evaluate rules.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: A page of rules, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRulePage'
+              example:
+                items:
+                  - id: 0192f5a0-1111-7000-8000-000000000001
+                    name: Max single transfer
+                    type: AMOUNT_LIMIT
+                    parameters:
+                      max_amount: 50000000
+                    enabled: true
+                    effective_at: '2026-10-01T00:00:00Z'
+                    revision: 1
+                    created_at: '2026-10-01T00:00:00Z'
+                    updated_at: '2026-10-01T00:00:00Z'
+                next_cursor: null
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Risk Rules]
+      operationId: createRiskRule
+      summary: Create a risk rule
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskRuleInput'
+      responses:
+        '201':
+          description: Rule created with revision 1.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /risk-rules/{rule_id}:
+    patch:
+      tags: [Risk Rules]
+      operationId: updateRiskRule
+      summary: Change a rule with optimistic revision control
+      description: A stale `expected_revision` is rejected with 409 `CONFLICT`.
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskRulePatch'
+      responses:
+        '200':
+          description: Updated rule with an incremented revision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /risk-rules/{rule_id}/audit:
+    get:
+      tags: [Risk Rules]
+      operationId: listRiskRuleAudit
+      summary: Revision history of a rule
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of rule revisions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRulePage'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /blocked-identifiers:
+    get:
+      tags: [Blocked Identifiers]
+      operationId: listBlockedIdentifiers
+      summary: List blocked identifiers
+      parameters:
+        - name: active
+          in: query
+          required: false
+          description: Filter by active flag.
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of blocked identifiers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockedIdentifierPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Blocked Identifiers]
+      operationId: createBlockedIdentifier
+      summary: Block an IBAN
+      description: Only one active record may exist per identifier; a second one returns 409 `CONFLICT`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BlockedIdentifierInput'
+      responses:
+        '201':
+          description: Blocked identifier created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockedIdentifier'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /blocked-identifiers/{id}:
+    delete:
+      tags: [Blocked Identifiers]
+      operationId: deactivateBlockedIdentifier
+      summary: Deactivate a blocked identifier (soft delete, audit is kept)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deactivated.
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /manual-review-queue:
+    get:
+      tags: [Manual Review]
+      operationId: listManualReviewQueue
+      summary: List transactions waiting for a human decision
+      parameters:
+        - name: state
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ReviewState'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of queue items.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewItemPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /manual-review-queue/{item_id}/claim:
+    post:
+      tags: [Manual Review]
+      operationId: claimReviewItem
+      summary: Claim a queue item atomically
+      description: Only one operator can claim an item; a second claim returns 409 `CONFLICT`.
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The item is now claimed by the caller.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewItem'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /manual-review-queue/{item_id}/decision:
+    post:
+      tags: [Manual Review]
+      operationId: decideReviewItem
+      summary: Final human decision on a claimed item
+      description: Only the operator who claimed the item may decide; a reason is mandatory.
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDecisionInput'
+      responses:
+        '200':
+          description: The item is DECIDED and an event was appended to the history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /risk-statistics:
+    get:
+      tags: [Statistics]
+      operationId: getRiskStatistics
+      summary: Decision counts for a time range and the current queue size
+      description: |
+        Counts the initial automatic decision of every assessment with `start <= evaluated_at < end`
+        (half-open range, UTC). A later human decision is not counted again. `queue_size_now` is a
+        snapshot of open review items at request time, not a figure for the range.
+        `start == end` is a valid empty range and returns zeros; `start > end` is rejected.
+        Requires the `manager` group.
+      parameters:
+        - name: start
+          in: query
+          required: true
+          description: Range start, inclusive, ISO 8601 in UTC.
+          schema:
+            type: string
+            format: date-time
+          example: '2026-10-24T00:00:00Z'
+        - name: end
+          in: query
+          required: true
+          description: Range end, exclusive, ISO 8601 in UTC.
+          schema:
+            type: string
+            format: date-time
+          example: '2026-10-25T00:00:00Z'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Zero-filled counts per decision type and the queue snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskStatistics'
+              example:
+                start: '2026-10-24T00:00:00Z'
+                end: '2026-10-25T00:00:00Z'
+                decisions:
+                  APPROVE: 120
+                  REVIEW: 7
+                  REJECT: 3
+                queue_size_now: 4
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /deliveries:
+    get:
+      tags: [Deliveries]
+      operationId: listDeliveries
+      summary: Delivery status of decisions sent to S3-PAY
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/DeliveryStatus'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of deliveries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /deliveries/{delivery_id}/retry:
+    post:
+      tags: [Deliveries]
+      operationId: retryDelivery
+      summary: Retry a failed delivery manually
+      parameters:
+        - name: delivery_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Retry accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Delivery'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /health:
+    servers:
+      - url: http://localhost:8084
+    get:
+      tags: [Operations]
+      operationId: health_retrieve
+      summary: Liveness probe
+      description: Reports that the process is running. It does not check dependencies.
+      security: []
+      responses:
+        '200':
+          description: The process is up.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: UP
+                service: s4-rsk
+        4XX:
+          $ref: '#/components/responses/BadRequest'
+  /ready:
+    servers:
+      - url: http://localhost:8084
+    get:
+      tags: [Operations]
+      operationId: ready_retrieve
+      summary: Readiness probe
+      description: Reports whether dependencies (PostgreSQL) are reachable.
+      security: []
+      responses:
+        '200':
+          description: The service and its database are ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ready'
+              example:
+                status: READY
+                service: s4-rsk
+                database: CONNECTED
+        4XX:
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+      description: Django session cookie (ADR-001). Unsafe methods also require the CSRF token.
+  headers:
+    XCorrelationId:
+      description: Trace identifier of this response, also present in the logs.
+      required: true
+      schema:
+        type: string
+  parameters:
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      description: Optional trace identifier; generated when absent and propagated to later calls.
+      schema:
+        type: string
+        maxLength: 64
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Repeating a request with the same key and body returns the original response.
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size (maximum 200).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor copied from `next_cursor` of the previous page.
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Invalid or incomplete input (`VALIDATION_ERROR`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://errors.labbank.example/validation-error
+            title: Invalid or incomplete input
+            status: 400
+            code: VALIDATION_ERROR
+            detail: start must not be later than end.
+            correlation_id: 7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33
+    Forbidden:
+      description: No valid session (`UNAUTHORIZED`) or missing role (`FORBIDDEN`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://errors.labbank.example/forbidden
+            title: Access to resource is forbidden
+            status: 403
+            code: FORBIDDEN
+            detail: The manager role is required.
+            correlation_id: 7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33
+    NotFound:
+      description: The resource does not exist (`NOT_FOUND`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://errors.labbank.example/not-found
+            title: Resource not found
+            status: 404
+            code: NOT_FOUND
+            detail: The requested resource was not found.
+            correlation_id: 7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33
+    Conflict:
+      description: Conflict with the current state (`CONFLICT`) or key reuse (`IDEMPOTENCY_KEY_REUSED`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://errors.labbank.example/conflict
+            title: Resource conflict
+            status: 409
+            code: CONFLICT
+            detail: An active blocked identifier already exists.
+            correlation_id: 7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33
+    ServiceUnavailable:
+      description: A dependency such as the database is unavailable (`SERVICE_UNAVAILABLE`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://errors.labbank.example/service-unavailable
+            title: Dependency unavailable
+            status: 503
+            code: SERVICE_UNAVAILABLE
+            detail: Database connection check failed.
+            correlation_id: 7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33
+  schemas:
+    Problem:
+      type: object
+      description: |
+        RFC 9457 error body. Base codes: VALIDATION_ERROR (400), UNAUTHORIZED (401/403), FORBIDDEN (403),
+        NOT_FOUND (404), CONFLICT (409), IDEMPOTENCY_KEY_REUSED (409), SERVICE_UNAVAILABLE (503),
+        UPSTREAM_TIMEOUT (504).
+      required: [type, title, status, code, detail, correlation_id]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        code:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]*$'
+        detail:
+          type: string
+        correlation_id:
+          type: string
+    Decision:
+      type: string
+      enum: [APPROVE, REVIEW, REJECT]
+    Iban:
+      type: string
+      description: Iranian IBAN, `IR` followed by 24 digits.
+      pattern: '^IR[0-9]{24}$'
+      minLength: 26
+      maxLength: 26
+    RiskAssessmentRequest:
+      type: object
+      required: [transaction_id, amount, currency, source_iban, destination_iban, occurred_at]
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+          description: Transfer identifier generated by S3-PAY.
+        amount:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854775807
+          description: Amount in IRR, strictly positive integer.
+        currency:
+          type: string
+          enum: [IRR]
+        source_iban:
+          $ref: '#/components/schemas/Iban'
+        source_account_id:
+          type: string
+          format: uuid
+          description: |
+            Optional. Ledger account identifier of the source IBAN, known to S3-PAY. Lets S4-RSK read the
+            account's recent debits from S2-LDG. When absent the history check is skipped.
+        destination_iban:
+          $ref: '#/components/schemas/Iban'
+          description: Must differ from `source_iban`.
+        occurred_at:
+          type: string
+          format: date-time
+          description: When the transfer happened in S3-PAY; explicit timezone required, normalized to UTC.
+    DecisionReason:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable reason, e.g. NO_RULE_MATCHED.
+        message:
+          type: string
+        rule_id:
+          type: string
+          format: uuid
+        rule_revision:
+          type: integer
+          minimum: 1
+        rule_snapshot:
+          type: object
+          additionalProperties: true
+    RiskAssessment:
+      type: object
+      required: [decision_id, transaction_id, decision, evaluated_at, reasons]
+      properties:
+        decision_id:
+          type: string
+          format: uuid
+        transaction_id:
+          type: string
+          format: uuid
+        decision:
+          $ref: '#/components/schemas/Decision'
+        evaluated_at:
+          type: string
+          format: date-time
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/DecisionReason'
+    RiskAssessmentDetail:
+      allOf:
+        - $ref: '#/components/schemas/RiskAssessment'
+        - type: object
+          required: [amount, currency, source_iban, destination_iban, occurred_at]
+          properties:
+            amount:
+              type: integer
+              format: int64
+            currency:
+              type: string
+              enum: [IRR]
+            source_iban:
+              $ref: '#/components/schemas/Iban'
+            destination_iban:
+              $ref: '#/components/schemas/Iban'
+            occurred_at:
+              type: string
+              format: date-time
+    DecisionEvent:
+      type: object
+      required: [event_id, decision_id, transaction_id, event_type, decision, actor, reason_code, created_at]
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        decision_id:
+          type: string
+          format: uuid
+        transaction_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+          enum: [INITIAL_EVALUATION, MANUAL_DECISION]
+        decision:
+          $ref: '#/components/schemas/Decision'
+        actor:
+          type: string
+          description: SYSTEM for the automatic evaluation, otherwise the operator identifier.
+        reason_code:
+          type: string
+        reason_message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    DecisionEventPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DecisionEvent'
+        next_cursor:
+          type: [string, 'null']
+    RiskRuleInput:
+      type: object
+      required: [name, type, parameters]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        type:
+          type: string
+          enum: [AMOUNT_LIMIT, BLOCKLIST]
+        parameters:
+          type: object
+          additionalProperties: true
+        enabled:
+          type: boolean
+          default: false
+        effective_at:
+          type: string
+          format: date-time
+    RiskRulePatch:
+      type: object
+      required: [expected_revision]
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 1
+          description: Revision the client last saw; a mismatch returns 409.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        parameters:
+          type: object
+          additionalProperties: true
+        enabled:
+          type: boolean
+        effective_at:
+          type: string
+          format: date-time
+    RiskRule:
+      type: object
+      required: [id, name, type, parameters, enabled, effective_at, revision, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [AMOUNT_LIMIT, BLOCKLIST]
+        parameters:
+          type: object
+          additionalProperties: true
+        enabled:
+          type: boolean
+        effective_at:
+          type: string
+          format: date-time
+        revision:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RiskRulePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskRule'
+        next_cursor:
+          type: [string, 'null']
+    BlockedIdentifierInput:
+      type: object
+      required: [kind, value, reason]
+      properties:
+        kind:
+          type: string
+          enum: [IBAN]
+        value:
+          $ref: '#/components/schemas/Iban'
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 255
+    BlockedIdentifier:
+      type: object
+      required: [id, kind, value, reason, active, created_by, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [IBAN]
+        value:
+          $ref: '#/components/schemas/Iban'
+        reason:
+          type: string
+        active:
+          type: boolean
+        created_by:
+          type: string
+          description: Identity of the authenticated user, never taken from the request body.
+        created_at:
+          type: string
+          format: date-time
+        deactivated_at:
+          type: [string, 'null']
+          format: date-time
+    BlockedIdentifierPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockedIdentifier'
+        next_cursor:
+          type: [string, 'null']
+    ReviewState:
+      type: string
+      enum: [OPEN, CLAIMED, DECIDED]
+    ReviewItem:
+      type: object
+      required: [item_id, decision_id, transaction_id, state, created_at]
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        decision_id:
+          type: string
+          format: uuid
+        transaction_id:
+          type: string
+          format: uuid
+        state:
+          $ref: '#/components/schemas/ReviewState'
+        claimed_by:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
+    ReviewItemPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewItem'
+        next_cursor:
+          type: [string, 'null']
+    ReviewDecisionInput:
+      type: object
+      required: [decision, reason]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVE, REJECT]
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 255
+    RiskStatistics:
+      type: object
+      required: [start, end, decisions, queue_size_now]
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        decisions:
+          type: object
+          required: [APPROVE, REVIEW, REJECT]
+          properties:
+            APPROVE:
+              type: integer
+              minimum: 0
+            REVIEW:
+              type: integer
+              minimum: 0
+            REJECT:
+              type: integer
+              minimum: 0
+        queue_size_now:
+          type: integer
+          minimum: 0
+          description: Open review items right now (snapshot, not a count for the range).
+    DeliveryStatus:
+      type: string
+      enum: [PENDING, DELIVERED, FAILED]
+    Delivery:
+      type: object
+      required: [delivery_id, decision_id, transaction_id, status, attempts, created_at]
+      properties:
+        delivery_id:
+          type: string
+          format: uuid
+        decision_id:
+          type: string
+          format: uuid
+        transaction_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/DeliveryStatus'
+        attempts:
+          type: integer
+          minimum: 0
+        last_error:
+          type: [string, 'null']
+        created_at:
+          type: string
+          format: date-time
+    DeliveryPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Delivery'
+        next_cursor:
+          type: [string, 'null']
+    Health:
+      type: object
+      required: [status, service]
+      properties:
+        status:
+          type: string
+          enum: [UP]
+        service:
+          type: string
+    Ready:
+      type: object
+      required: [status, service, database]
+      properties:
+        status:
+          type: string
+          enum: [READY]
+        service:
+          type: string
+        database:
+          type: string
+          enum: [CONNECTED]
