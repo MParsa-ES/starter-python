@@ -4,6 +4,299 @@
  */
 
 export interface paths {
+    "/risk-assessments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Evaluate a transfer and persist the initial decision
+         * @description Called by S3-PAY before executing a transfer. S4-RSK evaluates the transfer against the
+         *     active rules and the blocklist, stores the decision with its reasons and returns it.
+         *     The same `Idempotency-Key` with the same body replays the original 201 response; the same key
+         *     with a different body is rejected with 409 `IDEMPOTENCY_KEY_REUSED`.
+         *
+         *     When `source_account_id` is present, S4-RSK may read the recent debits of that account from
+         *     S2-LDG (`GET /accounts/{id}/entries`) to detect unusual behavior. If S2-LDG answers 404 or does
+         *     not answer in time, the decision is `REVIEW` with reason `ACCOUNT_NOT_FOUND` or `LEDGER_UNAVAILABLE`.
+         *     When it is absent, that history check is skipped.
+         */
+        post: operations["createRiskAssessment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/risk-assessments/{decision_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a persisted decision with its transaction context */
+        get: operations["getRiskAssessmentById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transactions/{transaction_id}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Append-only decision history of one transaction
+         * @description Initial automatic evaluation followed by manual operator decisions, oldest first.
+         */
+        get: operations["listTransactionDecisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/decision-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Bounded search over decision events */
+        get: operations["searchDecisionEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/risk-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List stored risk rules
+         * @description Includes disabled and future rules. Requires the `manager` group; it does not evaluate rules.
+         */
+        get: operations["risk_rules_list"];
+        put?: never;
+        /** Create a risk rule */
+        post: operations["createRiskRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/risk-rules/{rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change a rule with optimistic revision control
+         * @description A stale `expected_revision` is rejected with 409 `CONFLICT`.
+         */
+        patch: operations["updateRiskRule"];
+        trace?: never;
+    };
+    "/risk-rules/{rule_id}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Revision history of a rule */
+        get: operations["listRiskRuleAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/blocked-identifiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List blocked identifiers */
+        get: operations["listBlockedIdentifiers"];
+        put?: never;
+        /**
+         * Block an IBAN
+         * @description Only one active record may exist per identifier; a second one returns 409 `CONFLICT`.
+         */
+        post: operations["createBlockedIdentifier"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/blocked-identifiers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Deactivate a blocked identifier (soft delete, audit is kept) */
+        delete: operations["deactivateBlockedIdentifier"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/manual-review-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List transactions waiting for a human decision */
+        get: operations["listManualReviewQueue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/manual-review-queue/{item_id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim a queue item atomically
+         * @description Only one operator can claim an item; a second claim returns 409 `CONFLICT`.
+         */
+        post: operations["claimReviewItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/manual-review-queue/{item_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Final human decision on a claimed item
+         * @description Only the operator who claimed the item may decide; a reason is mandatory.
+         */
+        post: operations["decideReviewItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/risk-statistics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Decision counts for a time range and the current queue size
+         * @description Counts the initial automatic decision of every assessment with `start <= evaluated_at < end`
+         *     (half-open range, UTC). A later human decision is not counted again. `queue_size_now` is a
+         *     snapshot of open review items at request time, not a figure for the range.
+         *     `start == end` is a valid empty range and returns zeros; `start > end` is rejected.
+         *     Requires the `manager` group.
+         */
+        get: operations["getRiskStatistics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Delivery status of decisions sent to S3-PAY */
+        get: operations["listDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deliveries/{delivery_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry a failed delivery manually */
+        post: operations["retryDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -11,7 +304,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description GEN-10: Reports process liveness. */
+        /**
+         * Liveness probe
+         * @description Reports that the process is running. It does not check dependencies.
+         */
         get: operations["health_retrieve"];
         put?: never;
         post?: never;
@@ -28,7 +324,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description GEN-10: Reports readiness of dependencies (PostgreSQL database). */
+        /**
+         * Readiness probe
+         * @description Reports whether dependencies (PostgreSQL) are reachable.
+         */
         get: operations["ready_retrieve"];
         put?: never;
         post?: never;
@@ -42,24 +341,943 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        HealthResponse: {
-            status: string;
+        /**
+         * @description RFC 9457 error body. Base codes: VALIDATION_ERROR (400), UNAUTHORIZED (401/403), FORBIDDEN (403),
+         *     NOT_FOUND (404), CONFLICT (409), IDEMPOTENCY_KEY_REUSED (409), SERVICE_UNAVAILABLE (503),
+         *     UPSTREAM_TIMEOUT (504).
+         */
+        Problem: {
+            /** Format: uri */
+            type: string;
+            title: string;
+            status: number;
+            code: string;
+            detail: string;
+            correlation_id: string;
+        };
+        /** @enum {string} */
+        Decision: "APPROVE" | "REVIEW" | "REJECT";
+        /** @description Iranian IBAN, `IR` followed by 24 digits. */
+        Iban: string;
+        RiskAssessmentRequest: {
+            /**
+             * Format: uuid
+             * @description Transfer identifier generated by S3-PAY.
+             */
+            transaction_id: string;
+            /**
+             * Format: int64
+             * @description Amount in IRR, strictly positive integer.
+             */
+            amount: number;
+            /** @enum {string} */
+            currency: "IRR";
+            source_iban: components["schemas"]["Iban"];
+            /**
+             * Format: uuid
+             * @description Optional. Ledger account identifier of the source IBAN, known to S3-PAY. Lets S4-RSK read the
+             *     account's recent debits from S2-LDG. When absent the history check is skipped.
+             */
+            source_account_id?: string;
+            /** @description Must differ from `source_iban`. */
+            destination_iban: components["schemas"]["Iban"];
+            /**
+             * Format: date-time
+             * @description When the transfer happened in S3-PAY; explicit timezone required, normalized to UTC.
+             */
+            occurred_at: string;
+        };
+        DecisionReason: {
+            /** @description Stable machine-readable reason, e.g. NO_RULE_MATCHED. */
+            code: string;
+            message: string;
+            /** Format: uuid */
+            rule_id?: string;
+            rule_revision?: number;
+            rule_snapshot?: {
+                [key: string]: unknown;
+            };
+        };
+        RiskAssessment: {
+            /** Format: uuid */
+            decision_id: string;
+            /** Format: uuid */
+            transaction_id: string;
+            decision: components["schemas"]["Decision"];
+            /** Format: date-time */
+            evaluated_at: string;
+            reasons: components["schemas"]["DecisionReason"][];
+        };
+        RiskAssessmentDetail: components["schemas"]["RiskAssessment"] & {
+            /** Format: int64 */
+            amount: number;
+            /** @enum {string} */
+            currency: "IRR";
+            source_iban: components["schemas"]["Iban"];
+            destination_iban: components["schemas"]["Iban"];
+            /** Format: date-time */
+            occurred_at: string;
+        };
+        DecisionEvent: {
+            /** Format: uuid */
+            event_id: string;
+            /** Format: uuid */
+            decision_id: string;
+            /** Format: uuid */
+            transaction_id: string;
+            /** @enum {string} */
+            event_type: "INITIAL_EVALUATION" | "MANUAL_DECISION";
+            decision: components["schemas"]["Decision"];
+            /** @description SYSTEM for the automatic evaluation, otherwise the operator identifier. */
+            actor: string;
+            reason_code: string;
+            reason_message?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        DecisionEventPage: {
+            items: components["schemas"]["DecisionEvent"][];
+            next_cursor: string | null;
+        };
+        RiskRuleInput: {
+            name: string;
+            /** @enum {string} */
+            type: "AMOUNT_LIMIT" | "BLOCKLIST";
+            parameters: {
+                [key: string]: unknown;
+            };
+            /** @default false */
+            enabled: boolean;
+            /** Format: date-time */
+            effective_at?: string;
+        };
+        RiskRulePatch: {
+            /** @description Revision the client last saw; a mismatch returns 409. */
+            expected_revision: number;
+            name?: string;
+            parameters?: {
+                [key: string]: unknown;
+            };
+            enabled?: boolean;
+            /** Format: date-time */
+            effective_at?: string;
+        };
+        RiskRule: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            type: "AMOUNT_LIMIT" | "BLOCKLIST";
+            parameters: {
+                [key: string]: unknown;
+            };
+            enabled: boolean;
+            /** Format: date-time */
+            effective_at: string;
+            revision: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RiskRulePage: {
+            items: components["schemas"]["RiskRule"][];
+            next_cursor: string | null;
+        };
+        BlockedIdentifierInput: {
+            /** @enum {string} */
+            kind: "IBAN";
+            value: components["schemas"]["Iban"];
+            reason: string;
+        };
+        BlockedIdentifier: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "IBAN";
+            value: components["schemas"]["Iban"];
+            reason: string;
+            active: boolean;
+            /** @description Identity of the authenticated user, never taken from the request body. */
+            created_by: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            deactivated_at?: string | null;
+        };
+        BlockedIdentifierPage: {
+            items: components["schemas"]["BlockedIdentifier"][];
+            next_cursor: string | null;
+        };
+        /** @enum {string} */
+        ReviewState: "OPEN" | "CLAIMED" | "DECIDED";
+        ReviewItem: {
+            /** Format: uuid */
+            item_id: string;
+            /** Format: uuid */
+            decision_id: string;
+            /** Format: uuid */
+            transaction_id: string;
+            state: components["schemas"]["ReviewState"];
+            claimed_by?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ReviewItemPage: {
+            items: components["schemas"]["ReviewItem"][];
+            next_cursor: string | null;
+        };
+        ReviewDecisionInput: {
+            /** @enum {string} */
+            decision: "APPROVE" | "REJECT";
+            reason: string;
+        };
+        RiskStatistics: {
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            decisions: {
+                APPROVE: number;
+                REVIEW: number;
+                REJECT: number;
+            };
+            /** @description Open review items right now (snapshot, not a count for the range). */
+            queue_size_now: number;
+        };
+        /** @enum {string} */
+        DeliveryStatus: "PENDING" | "DELIVERED" | "FAILED";
+        Delivery: {
+            /** Format: uuid */
+            delivery_id: string;
+            /** Format: uuid */
+            decision_id: string;
+            /** Format: uuid */
+            transaction_id: string;
+            status: components["schemas"]["DeliveryStatus"];
+            attempts: number;
+            last_error?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        DeliveryPage: {
+            items: components["schemas"]["Delivery"][];
+            next_cursor: string | null;
+        };
+        Health: {
+            /** @enum {string} */
+            status: "UP";
             service: string;
         };
-        ReadyResponse: {
-            status: string;
+        Ready: {
+            /** @enum {string} */
+            status: "READY";
             service: string;
-            database: string;
+            /** @enum {string} */
+            database: "CONNECTED";
         };
     };
-    responses: never;
-    parameters: never;
+    responses: {
+        /** @description Invalid or incomplete input (`VALIDATION_ERROR`). */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://errors.labbank.example/validation-error",
+                 *       "title": "Invalid or incomplete input",
+                 *       "status": 400,
+                 *       "code": "VALIDATION_ERROR",
+                 *       "detail": "start must not be later than end.",
+                 *       "correlation_id": "7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description No valid session (`UNAUTHORIZED`) or missing role (`FORBIDDEN`). */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://errors.labbank.example/forbidden",
+                 *       "title": "Access to resource is forbidden",
+                 *       "status": 403,
+                 *       "code": "FORBIDDEN",
+                 *       "detail": "The manager role is required.",
+                 *       "correlation_id": "7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The resource does not exist (`NOT_FOUND`). */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://errors.labbank.example/not-found",
+                 *       "title": "Resource not found",
+                 *       "status": 404,
+                 *       "code": "NOT_FOUND",
+                 *       "detail": "The requested resource was not found.",
+                 *       "correlation_id": "7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Conflict with the current state (`CONFLICT`) or key reuse (`IDEMPOTENCY_KEY_REUSED`). */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://errors.labbank.example/conflict",
+                 *       "title": "Resource conflict",
+                 *       "status": 409,
+                 *       "code": "CONFLICT",
+                 *       "detail": "An active blocked identifier already exists.",
+                 *       "correlation_id": "7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description A dependency such as the database is unavailable (`SERVICE_UNAVAILABLE`). */
+        ServiceUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://errors.labbank.example/service-unavailable",
+                 *       "title": "Dependency unavailable",
+                 *       "status": 503,
+                 *       "code": "SERVICE_UNAVAILABLE",
+                 *       "detail": "Database connection check failed.",
+                 *       "correlation_id": "7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+    };
+    parameters: {
+        /** @description Optional trace identifier; generated when absent and propagated to later calls. */
+        CorrelationId: string;
+        /** @description Repeating a request with the same key and body returns the original response. */
+        IdempotencyKey: string;
+        /** @description Page size (maximum 200). */
+        Limit: number;
+        /** @description Opaque cursor copied from `next_cursor` of the previous page. */
+        Cursor: string;
+    };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description Trace identifier of this response, also present in the logs. */
+        XCorrelationId: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    createRiskAssessment: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Repeating a request with the same key and body returns the original response. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                /** @description Optional trace identifier; generated when absent and propagated to later calls. */
+                "X-Correlation-ID"?: components["parameters"]["CorrelationId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "transaction_id": "0192f5a0-7c1e-7d3a-9b2f-3c4d5e6f7a8b",
+                 *       "amount": 2500000,
+                 *       "currency": "IRR",
+                 *       "source_iban": "IR080540102680020817909002",
+                 *       "source_account_id": "0192f5a0-5555-7aaa-8bbb-0123456789ab",
+                 *       "destination_iban": "IR640170000000123456789012",
+                 *       "occurred_at": "2026-10-24T08:30:00Z"
+                 *     }
+                 */
+                "application/json": components["schemas"]["RiskAssessmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Decision created (or replayed for a repeated Idempotency-Key). */
+            201: {
+                headers: {
+                    "X-Correlation-ID": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "decision_id": "0192f5a0-8a11-7b6c-8e4d-1a2b3c4d5e6f",
+                     *       "transaction_id": "0192f5a0-7c1e-7d3a-9b2f-3c4d5e6f7a8b",
+                     *       "decision": "APPROVE",
+                     *       "evaluated_at": "2026-10-24T08:30:01Z",
+                     *       "reasons": [
+                     *         {
+                     *           "code": "NO_RULE_MATCHED",
+                     *           "message": "No active rule matched this transaction."
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["RiskAssessment"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getRiskAssessmentById: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional trace identifier; generated when absent and propagated to later calls. */
+                "X-Correlation-ID"?: components["parameters"]["CorrelationId"];
+            };
+            path: {
+                /** @description Identifier returned by createRiskAssessment. */
+                decision_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The decision, its reasons and the evaluated transaction. */
+            200: {
+                headers: {
+                    "X-Correlation-ID": components["headers"]["XCorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "decision_id": "0192f5a0-8a11-7b6c-8e4d-1a2b3c4d5e6f",
+                     *       "transaction_id": "0192f5a0-7c1e-7d3a-9b2f-3c4d5e6f7a8b",
+                     *       "decision": "APPROVE",
+                     *       "evaluated_at": "2026-10-24T08:30:01Z",
+                     *       "reasons": [
+                     *         {
+                     *           "code": "NO_RULE_MATCHED",
+                     *           "message": "No active rule matched this transaction."
+                     *         }
+                     *       ],
+                     *       "amount": 2500000,
+                     *       "currency": "IRR",
+                     *       "source_iban": "IR080540102680020817909002",
+                     *       "destination_iban": "IR640170000000123456789012",
+                     *       "occurred_at": "2026-10-24T08:30:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["RiskAssessmentDetail"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listTransactionDecisions: {
+        parameters: {
+            query?: {
+                /** @description Page size (maximum 200). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque cursor copied from `next_cursor` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: {
+                /** @description Optional trace identifier; generated when absent and propagated to later calls. */
+                "X-Correlation-ID"?: components["parameters"]["CorrelationId"];
+            };
+            path: {
+                transaction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of decision events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionEventPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    searchDecisionEvents: {
+        parameters: {
+            query?: {
+                decision?: components["schemas"]["Decision"];
+                /** @description Inclusive lower bound, ISO 8601 UTC. */
+                from?: string;
+                /** @description Exclusive upper bound, ISO 8601 UTC. */
+                to?: string;
+                /** @description Page size (maximum 200). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque cursor copied from `next_cursor` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of decision events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionEventPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    risk_rules_list: {
+        parameters: {
+            query?: {
+                /** @description Page size (maximum 200). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque cursor copied from `next_cursor` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: {
+                /** @description Optional trace identifier; generated when absent and propagated to later calls. */
+                "X-Correlation-ID"?: components["parameters"]["CorrelationId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of rules, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "0192f5a0-1111-7000-8000-000000000001",
+                     *           "name": "Max single transfer",
+                     *           "type": "AMOUNT_LIMIT",
+                     *           "parameters": {
+                     *             "max_amount": 50000000
+                     *           },
+                     *           "enabled": true,
+                     *           "effective_at": "2026-10-01T00:00:00Z",
+                     *           "revision": 1,
+                     *           "created_at": "2026-10-01T00:00:00Z",
+                     *           "updated_at": "2026-10-01T00:00:00Z"
+                     *         }
+                     *       ],
+                     *       "next_cursor": null
+                     *     }
+                     */
+                    "application/json": components["schemas"]["RiskRulePage"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createRiskRule: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Repeating a request with the same key and body returns the original response. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RiskRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Rule created with revision 1. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskRule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateRiskRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RiskRulePatch"];
+            };
+        };
+        responses: {
+            /** @description Updated rule with an incremented revision. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskRule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listRiskRuleAudit: {
+        parameters: {
+            query?: {
+                /** @description Page size (maximum 200). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque cursor copied from `next_cursor` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of rule revisions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskRulePage"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listBlockedIdentifiers: {
+        parameters: {
+            query?: {
+                /** @description Filter by active flag. */
+                active?: boolean;
+                /** @description Page size (maximum 200). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque cursor copied from `next_cursor` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of blocked identifiers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockedIdentifierPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createBlockedIdentifier: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Repeating a request with the same key and body returns the original response. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockedIdentifierInput"];
+            };
+        };
+        responses: {
+            /** @description Blocked identifier created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockedIdentifier"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deactivateBlockedIdentifier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deactivated. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listManualReviewQueue: {
+        parameters: {
+            query?: {
+                state?: components["schemas"]["ReviewState"];
+                /** @description Page size (maximum 200). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque cursor copied from `next_cursor` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of queue items. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewItemPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    claimReviewItem: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Repeating a request with the same key and body returns the original response. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The item is now claimed by the caller. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewItem"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    decideReviewItem: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Repeating a request with the same key and body returns the original response. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewDecisionInput"];
+            };
+        };
+        responses: {
+            /** @description The item is DECIDED and an event was appended to the history. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewItem"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getRiskStatistics: {
+        parameters: {
+            query: {
+                /**
+                 * @description Range start, inclusive, ISO 8601 in UTC.
+                 * @example 2026-10-24T00:00:00Z
+                 */
+                start: string;
+                /**
+                 * @description Range end, exclusive, ISO 8601 in UTC.
+                 * @example 2026-10-25T00:00:00Z
+                 */
+                end: string;
+            };
+            header?: {
+                /** @description Optional trace identifier; generated when absent and propagated to later calls. */
+                "X-Correlation-ID"?: components["parameters"]["CorrelationId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Zero-filled counts per decision type and the queue snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "start": "2026-10-24T00:00:00Z",
+                     *       "end": "2026-10-25T00:00:00Z",
+                     *       "decisions": {
+                     *         "APPROVE": 120,
+                     *         "REVIEW": 7,
+                     *         "REJECT": 3
+                     *       },
+                     *       "queue_size_now": 4
+                     *     }
+                     */
+                    "application/json": components["schemas"]["RiskStatistics"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listDeliveries: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["DeliveryStatus"];
+                /** @description Page size (maximum 200). */
+                limit?: components["parameters"]["Limit"];
+                /** @description Opaque cursor copied from `next_cursor` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of deliveries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    retryDelivery: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Repeating a request with the same key and body returns the original response. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                delivery_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retry accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Delivery"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     health_retrieve: {
         parameters: {
             query?: never;
@@ -69,14 +1287,22 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description The process is up. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HealthResponse"];
+                    /**
+                     * @example {
+                     *       "status": "UP",
+                     *       "service": "s4-rsk"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Health"];
                 };
             };
+            "4XX": components["responses"]["BadRequest"];
         };
     };
     ready_retrieve: {
@@ -88,21 +1314,24 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description The service and its database are ready. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReadyResponse"];
+                    /**
+                     * @example {
+                     *       "status": "READY",
+                     *       "service": "s4-rsk",
+                     *       "database": "CONNECTED"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Ready"];
                 };
             };
-            /** @description Database dependency unavailable (RFC 9457) */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
+            503: components["responses"]["ServiceUnavailable"];
+            "4XX": components["responses"]["BadRequest"];
         };
     };
 }
