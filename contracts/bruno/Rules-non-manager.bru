@@ -1,0 +1,22 @@
+meta {
+  name: Rules - non manager forbidden
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/risk-rules
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: sessionid={{nonManagerSessionId}}
+}
+
+tests {
+  test("Authenticated user without manager is rejected", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.getBody().code).to.equal("FORBIDDEN");
+  });
+}

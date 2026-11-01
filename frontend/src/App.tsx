@@ -10,7 +10,7 @@ type State =
   | { kind: "ok"; data: HealthResponse; httpStatus: number; ms: number }
   | { kind: "error"; message: string };
 
-export default function App() {
+function HealthPage() {
   const [state, setState] = useState<State>({ kind: "loading" });
 
   const check = useCallback(async () => {
@@ -75,6 +75,22 @@ export default function App() {
       )}
 
       <button onClick={() => void check()}>بررسی دوباره</button>
+    </main>
+  );
+}
+
+// مسیریابی ساده بدون کتابخانه: صفحه‌ی اصلی روی /health است و "/" به آن منتقل می‌شود.
+export default function App() {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path === "/") {
+    window.history.replaceState(null, "", "/health");
+    return <HealthPage />;
+  }
+  if (path === "/health") return <HealthPage />;
+  return (
+    <main className="card" dir="rtl">
+      <h1>۴۰۴</h1>
+      <p className="sub">این آدرس وجود ندارد. <a href="/health">رفتن به /health</a></p>
     </main>
   );
 }

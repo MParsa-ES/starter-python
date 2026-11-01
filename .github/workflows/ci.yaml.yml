@@ -9,6 +9,8 @@ on:
 jobs:
   test-and-lint:
     runs-on: ubuntu-latest
+    env:
+      DEBUG: "True"
 
     services:
       postgres:
@@ -43,6 +45,12 @@ jobs:
       - name: Run Ruff Linter
         working-directory: ./s4_rsk
         run: ruff check .
+
+      - name: Check Django and validate OpenAPI
+        working-directory: ./s4_rsk
+        run: |
+          python manage.py check
+          python manage.py spectacular --validate --fail-on-warn --file /tmp/openapi.yaml
 
       - name: Verify no missing Django migrations
         working-directory: ./s4_rsk
