@@ -2,11 +2,12 @@ from urllib.parse import unquote, urlparse
 
 import pytest
 from django.conf import settings
-from testcontainers.postgres import PostgresContainer
 
 
 @pytest.fixture(scope="session")
 def postgres_container():
+    from testcontainers.postgres import PostgresContainer
+
     with PostgresContainer(
         "postgres:16-alpine",
         username="test_user",
