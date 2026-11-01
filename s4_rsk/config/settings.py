@@ -32,6 +32,10 @@ CORS_ALLOWED_ORIGINS = env.list(
     default=["http://localhost:5173", "http://127.0.0.1:5173"],
 )
 CORS_EXPOSE_HEADERS = ["X-Correlation-ID"]
+# Local Swagger UI (another origin) must send the session cookie and the CSRF token.
+# Both stay OFF unless enabled in .env, so nothing changes outside local development.
+CORS_ALLOW_CREDENTIALS = env.bool("CORS_ALLOW_CREDENTIALS", default=False)
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 # Application definition
 INSTALLED_APPS = [
