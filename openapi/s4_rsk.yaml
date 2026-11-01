@@ -39,6 +39,9 @@ paths:
     post:
       tags: [Risk Assessments]
       operationId: createRiskAssessment
+      security:
+        - sessionAuth: []
+          csrfToken: []
       summary: Evaluate a transfer and persist the initial decision
       description: |
         Called by S3-PAY before executing a transfer. S4-RSK evaluates the transfer against the
@@ -238,6 +241,9 @@ paths:
     post:
       tags: [Risk Rules]
       operationId: createRiskRule
+      security:
+        - sessionAuth: []
+          csrfToken: []
       summary: Create a risk rule
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -264,6 +270,9 @@ paths:
     patch:
       tags: [Risk Rules]
       operationId: updateRiskRule
+      security:
+        - sessionAuth: []
+          csrfToken: []
       summary: Change a rule with optimistic revision control
       description: A stale `expected_revision` is rejected with 409 `CONFLICT`.
       parameters:
@@ -347,6 +356,9 @@ paths:
     post:
       tags: [Blocked Identifiers]
       operationId: createBlockedIdentifier
+      security:
+        - sessionAuth: []
+          csrfToken: []
       summary: Block an IBAN
       description: Only one active record may exist per identifier; a second one returns 409 `CONFLICT`.
       parameters:
@@ -374,6 +386,9 @@ paths:
     delete:
       tags: [Blocked Identifiers]
       operationId: deactivateBlockedIdentifier
+      security:
+        - sessionAuth: []
+          csrfToken: []
       summary: Deactivate a blocked identifier (soft delete, audit is kept)
       parameters:
         - name: id
@@ -417,6 +432,9 @@ paths:
     post:
       tags: [Manual Review]
       operationId: claimReviewItem
+      security:
+        - sessionAuth: []
+          csrfToken: []
       summary: Claim a queue item atomically
       description: Only one operator can claim an item; a second claim returns 409 `CONFLICT`.
       parameters:
@@ -444,6 +462,9 @@ paths:
     post:
       tags: [Manual Review]
       operationId: decideReviewItem
+      security:
+        - sessionAuth: []
+          csrfToken: []
       summary: Final human decision on a claimed item
       description: Only the operator who claimed the item may decide; a reason is mandatory.
       parameters:
@@ -551,6 +572,9 @@ paths:
     post:
       tags: [Deliveries]
       operationId: retryDelivery
+      security:
+        - sessionAuth: []
+          csrfToken: []
       summary: Retry a failed delivery manually
       parameters:
         - name: delivery_id
@@ -625,6 +649,13 @@ components:
       in: cookie
       name: sessionid
       description: Django session cookie (ADR-001). Unsafe methods also require the CSRF token.
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRFToken
+      description: |
+        Value of the `csrftoken` cookie, required on unsafe methods (POST, PATCH, DELETE) for
+        session-authenticated clients (ADR-001). Without it the service answers 403.
   headers:
     XCorrelationId:
       description: Trace identifier of this response, also present in the logs.
