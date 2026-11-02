@@ -15,10 +15,27 @@ env_file = BASE_DIR / ".env"
 if env_file.exists():
     environ.Env.read_env(str(env_file))
 
-SECRET_KEY = env("SECRET_KEY", default="unsafe-dev-secret-key")
 DEBUG = env("DEBUG")
+SECRET_KEY = env("SECRET_KEY", default="unsafe-dev-secret-key" if DEBUG else None)
+if not DEBUG and (not SECRET_KEY or SECRET_KEY.startswith(("unsafe-", "django-insecure-"))):
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured("Set a non-development SECRET_KEY when DEBUG=False.")
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 SERVICE_NAME = env("SERVICE_NAME", default="s4-rsk")
+# CORS: origins allowed to call this API from a browser (frontend dev server)
+CORS_ALLOWED_ORIGINS = env.list(
+    "CORS_ALLOWED_ORIGINS",
+    default=["http://localhost:5173", "http://127.0.0.1:5173"],
+)
+CORS_EXPOSE_HEADERS = ["X-Correlation-ID"]
+# Local Swagger UI (another origin) must send the session cookie and the CSRF token.
+# Both stay OFF unless enabled in .env, so nothing changes outside local development.
+CORS_ALLOW_CREDENTIALS = env.bool("CORS_ALLOW_CREDENTIALS", default=False)
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 # Application definition
 INSTALLED_APPS = [
@@ -30,6 +47,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # Third-party apps
     "rest_framework",
+    "corsheaders",
     "drf_spectacular",
     # S4-RSK Local Apps
     "common",
@@ -40,6 +58,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "common.middleware.CorrelationIdMiddleware",  # GEN-08: Must be first
+    "corsheaders.middleware.CorsMiddleware",  # must be before CommonMiddleware
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -77,7 +96,7 @@ DATABASES = {
         "USER": env("POSTGRES_USER", default="s4_rsk_user"),
         "PASSWORD": env("POSTGRES_PASSWORD", default="s4_rsk_password"),
         "HOST": env("POSTGRES_HOST", default="localhost"),
-        "PORT": env("POSTGRES_PORT", default="5432"),
+        "PORT": env("POSTGRES_PORT", default="5434"),
         "CONN_MAX_AGE": 60,
         "CONN_HEALTH_CHECKS": True,
     }
@@ -95,6 +114,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Django REST Framework Settings
 REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],
