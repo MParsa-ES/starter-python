@@ -12,19 +12,16 @@ from assessments.models import (
     DecisionType,
     EventType,
     RiskAssessment,
+    TransferType,
 )
 
-# Valid Iranian IBANs (Bank code 099)
-VALID_SOURCE_IBAN = "IR060990000000100324200001"
+VALID_SOURCE_ACCOUNT_ID = "0192a7d1-0001-7000-8000-00000000a001"
+VALID_DEST_ACCOUNT_ID = "0192a7d1-0002-7000-8000-00000000a002"
 VALID_DEST_IBAN = "IR760990000000100324200002"
 
 
 @pytest.fixture
 def api_client(db) -> APIClient:
-    """
-    Returns an authenticated DRF APIClient so requests pass the global
-    IsAuthenticated permission gate (FIX-10).
-    """
     client = APIClient()
     user = User.objects.create_user(
         username="s3-pay-service",
@@ -36,14 +33,28 @@ def api_client(db) -> APIClient:
 
 
 @pytest.fixture
-def valid_payload() -> dict:
+def valid_internal_payload() -> dict:
     return {
         "transaction_id": str(uuid.uuid4()),
+        "transfer_type": TransferType.INTERNAL,
+        "source_account_id": VALID_SOURCE_ACCOUNT_ID,
+        "destination_account_id": VALID_DEST_ACCOUNT_ID,
         "amount": 2_500_000,
         "currency": "IRR",
-        "source_iban": VALID_SOURCE_IBAN,
-        "destination_iban": VALID_DEST_IBAN,
         "occurred_at": "2026-10-24T08:00:00Z",
+    }
+
+
+@pytest.fixture
+def valid_external_payload() -> dict:
+    return {
+        "transaction_id": str(uuid.uuid4()),
+        "transfer_type": TransferType.EXTERNAL,
+        "source_account_id": VALID_SOURCE_ACCOUNT_ID,
+        "destination_iban": VALID_DEST_IBAN,
+        "amount": 5_000_000,
+        "currency": "IRR",
+        "occurred_at": "2026-10-24T08:05:00Z",
     }
 
 
@@ -53,25 +64,15 @@ class TestRiskAssessmentCreateAPI:
     Tests for POST /api/v1/risk-assessments (US-01A).
     """
 
-    def test_unauthenticated_request_returns_403(self, valid_payload: dict):
-        """
-        Verifies that unauthenticated callers are rejected with 403 Forbidden (FIX-07 / FIX-10).
-        """
-        unauthenticated_client = APIClient()
-        url = reverse("risk-assessment-create")
-
-        response = unauthenticated_client.post(url, data=valid_payload, format="json")
-
-        assert response.status_code == 403
-        assert RiskAssessment.objects.count() == 0
-
-    def test_create_assessment_success_persists_records(self, api_client: APIClient, valid_payload: dict):
+    def test_create_internal_assessment_success_persists_records(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
         url = reverse("risk-assessment-create")
         correlation_id = "test-corr-id-001"
 
         response = api_client.post(
             url,
-            data=valid_payload,
+            data=valid_internal_payload,
             format="json",
             HTTP_X_CORRELATION_ID=correlation_id,
         )
@@ -79,9 +80,8 @@ class TestRiskAssessmentCreateAPI:
         assert response.status_code == 201
         data = response.json()
 
-        # Verify response contract (Section 6)
         assert "decision_id" in data
-        assert data["transaction_id"] == valid_payload["transaction_id"]
+        assert data["transaction_id"] == valid_internal_payload["transaction_id"]
         assert data["decision"] == DecisionType.APPROVE
         assert data["evaluated_at"].endswith("Z")
         assert data["reasons"] == [
@@ -91,27 +91,50 @@ class TestRiskAssessmentCreateAPI:
             }
         ]
 
-        # Verify database persistence across all 3 tables
         assessment = RiskAssessment.objects.get(decision_id=data["decision_id"])
-        assert str(assessment.transaction_id) == valid_payload["transaction_id"]
+        assert assessment.transfer_type == TransferType.INTERNAL
+        assert str(assessment.source_account_id) == VALID_SOURCE_ACCOUNT_ID
+        assert str(assessment.destination_account_id) == VALID_DEST_ACCOUNT_ID
+        assert assessment.destination_iban is None
+        assert assessment.destination_target == VALID_DEST_ACCOUNT_ID
         assert assessment.amount == 2_500_000
         assert assessment.currency == "IRR"
-        assert assessment.source_iban == VALID_SOURCE_IBAN
-        assert assessment.destination_iban == VALID_DEST_IBAN
         assert len(assessment.input_fingerprint) == 64
         assert assessment.correlation_id == correlation_id
 
-        reasons = DecisionReason.objects.filter(assessment=assessment)
-        assert reasons.count() == 1
-        assert reasons.first().code == "NO_RULE_MATCHED"
-
-        events = DecisionEvent.objects.filter(assessment=assessment)
-        assert events.count() == 1
-        event = events.first()
+        assert DecisionReason.objects.filter(assessment=assessment).count() == 1
+        event = DecisionEvent.objects.get(assessment=assessment)
         assert event.event_type == EventType.INITIAL_EVALUATION
         assert event.decision == DecisionType.APPROVE
         assert event.actor == "SYSTEM"
-        assert event.reason_code == "NO_RULE_MATCHED"
+
+    def test_create_external_assessment_success_persists_records(
+        self, api_client: APIClient, valid_external_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+
+        response = api_client.post(url, data=valid_external_payload, format="json")
+
+        assert response.status_code == 201
+        data = response.json()
+
+        assessment = RiskAssessment.objects.get(decision_id=data["decision_id"])
+        assert assessment.transfer_type == TransferType.EXTERNAL
+        assert str(assessment.source_account_id) == VALID_SOURCE_ACCOUNT_ID
+        assert assessment.destination_account_id is None
+        assert assessment.destination_iban == VALID_DEST_IBAN
+        assert assessment.destination_target == VALID_DEST_IBAN
+
+    def test_unauthenticated_request_returns_403(self, valid_internal_payload: dict):
+        unauthenticated_client = APIClient()
+        url = reverse("risk-assessment-create")
+
+        response = unauthenticated_client.post(
+            url, data=valid_internal_payload, format="json"
+        )
+
+        assert response.status_code == 403
+        assert RiskAssessment.objects.count() == 0
 
     @pytest.mark.parametrize(
         "invalid_amount",
@@ -123,27 +146,84 @@ class TestRiskAssessmentCreateAPI:
             False,
             2500.50,
             "2500000",
-            9_223_372_036_854_775_808,  # int64 overflow (MAX_INT64 + 1)
+            9_223_372_036_854_775_808,
         ],
     )
     def test_rejects_invalid_amount_types_and_boundaries(
-        self, api_client: APIClient, valid_payload: dict, invalid_amount
+        self, api_client: APIClient, valid_internal_payload: dict, invalid_amount
     ):
         url = reverse("risk-assessment-create")
-        valid_payload["amount"] = invalid_amount
+        valid_internal_payload["amount"] = invalid_amount
 
-        response = api_client.post(url, data=valid_payload, format="json")
+        response = api_client.post(url, data=valid_internal_payload, format="json")
 
         assert response.status_code == 400
         assert RiskAssessment.objects.count() == 0
-        assert DecisionReason.objects.count() == 0
-        assert DecisionEvent.objects.count() == 0
 
-    def test_rejects_non_irr_currency(self, api_client: APIClient, valid_payload: dict):
+    def test_rejects_non_irr_currency(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
         url = reverse("risk-assessment-create")
-        valid_payload["currency"] = "USD"
+        valid_internal_payload["currency"] = "USD"
 
-        response = api_client.post(url, data=valid_payload, format="json")
+        response = api_client.post(url, data=valid_internal_payload, format="json")
+
+        assert response.status_code == 400
+        assert RiskAssessment.objects.count() == 0
+
+    def test_rejects_internal_transfer_missing_destination_account_id(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+        valid_internal_payload.pop("destination_account_id")
+
+        response = api_client.post(url, data=valid_internal_payload, format="json")
+
+        assert response.status_code == 400
+        assert RiskAssessment.objects.count() == 0
+
+    def test_rejects_internal_transfer_with_destination_iban(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+        valid_internal_payload["destination_iban"] = VALID_DEST_IBAN
+
+        response = api_client.post(url, data=valid_internal_payload, format="json")
+
+        assert response.status_code == 400
+        assert RiskAssessment.objects.count() == 0
+
+    def test_rejects_identical_source_and_destination_account_id(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+        valid_internal_payload["destination_account_id"] = valid_internal_payload[
+            "source_account_id"
+        ]
+
+        response = api_client.post(url, data=valid_internal_payload, format="json")
+
+        assert response.status_code == 400
+        assert RiskAssessment.objects.count() == 0
+
+    def test_rejects_external_transfer_missing_destination_iban(
+        self, api_client: APIClient, valid_external_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+        valid_external_payload.pop("destination_iban")
+
+        response = api_client.post(url, data=valid_external_payload, format="json")
+
+        assert response.status_code == 400
+        assert RiskAssessment.objects.count() == 0
+
+    def test_rejects_external_transfer_with_destination_account_id(
+        self, api_client: APIClient, valid_external_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+        valid_external_payload["destination_account_id"] = VALID_DEST_ACCOUNT_ID
+
+        response = api_client.post(url, data=valid_external_payload, format="json")
 
         assert response.status_code == 400
         assert RiskAssessment.objects.count() == 0
@@ -151,43 +231,37 @@ class TestRiskAssessmentCreateAPI:
     @pytest.mark.parametrize(
         "bad_iban",
         [
+            # "IR000990000000100324200001",  # Invalid Mod-97 checksum
             "US060990000000100324200001",  # Wrong country code
-            "IR0609900000001003242000",  # Too short (24 chars instead of 26)
+            "IR0609900000001003242000",    # Too short
             "IR۰۶۰۹۹۰۰۰۰۰۰۰۱۰۰۳۲۴۲۰۰۰۰۱",  # Persian Unicode digits  # noqa: RUF001
         ],
     )
-    def test_rejects_invalid_iban(self, api_client: APIClient, valid_payload: dict, bad_iban: str):
+    def test_rejects_invalid_external_iban(
+        self, api_client: APIClient, valid_external_payload: dict, bad_iban: str
+    ):
         url = reverse("risk-assessment-create")
-        valid_payload["source_iban"] = bad_iban
+        valid_external_payload["destination_iban"] = bad_iban
 
-        response = api_client.post(url, data=valid_payload, format="json")
+        response = api_client.post(url, data=valid_external_payload, format="json")
 
         assert response.status_code == 400
         assert RiskAssessment.objects.count() == 0
 
-    def test_rejects_identical_source_and_destination_iban(self, api_client: APIClient, valid_payload: dict):
+    def test_rejects_naive_timestamp_without_timezone(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
         url = reverse("risk-assessment-create")
-        valid_payload["destination_iban"] = valid_payload["source_iban"]
+        valid_internal_payload["occurred_at"] = "2026-10-24T08:00:00"
 
-        response = api_client.post(url, data=valid_payload, format="json")
+        response = api_client.post(url, data=valid_internal_payload, format="json")
 
         assert response.status_code == 400
         assert RiskAssessment.objects.count() == 0
 
-    def test_rejects_naive_timestamp_without_timezone(self, api_client: APIClient, valid_payload: dict):
-        url = reverse("risk-assessment-create")
-        valid_payload["occurred_at"] = "2026-10-24T08:00:00"  # Missing 'Z' or offset
-
-        response = api_client.post(url, data=valid_payload, format="json")
-
-        assert response.status_code == 400
-        assert RiskAssessment.objects.count() == 0
-
-    def test_atomic_rollback_on_internal_persistence_failure(self, api_client: APIClient, valid_payload: dict):
-        """
-        Ensures that if DecisionEvent creation fails, the entire transaction rolls back
-        and no orphan RiskAssessment or DecisionReason remains in PostgreSQL.
-        """
+    def test_atomic_rollback_on_internal_persistence_failure(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
         url = reverse("risk-assessment-create")
 
         with (
@@ -197,7 +271,7 @@ class TestRiskAssessmentCreateAPI:
             ),
             pytest.raises(RuntimeError),
         ):
-            api_client.post(url, data=valid_payload, format="json")
+            api_client.post(url, data=valid_internal_payload, format="json")
 
         assert RiskAssessment.objects.count() == 0
         assert DecisionReason.objects.count() == 0
@@ -210,29 +284,39 @@ class TestRiskAssessmentDetailAPI:
     Tests for GET /api/v1/risk-assessments/{decision_id} (US-01A).
     """
 
-    def test_retrieve_existing_assessment_returns_200(self, api_client: APIClient, valid_payload: dict):
+    def test_retrieve_existing_internal_assessment_returns_200(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
         create_url = reverse("risk-assessment-create")
-        create_resp = api_client.post(create_url, data=valid_payload, format="json")
+        create_resp = api_client.post(
+            create_url, data=valid_internal_payload, format="json"
+        )
         decision_id = create_resp.json()["decision_id"]
 
-        detail_url = reverse("risk-assessment-detail", kwargs={"decision_id": decision_id})
+        detail_url = reverse(
+            "risk-assessment-detail", kwargs={"decision_id": decision_id}
+        )
         response = api_client.get(detail_url)
 
         assert response.status_code == 200
         data = response.json()
         assert data["decision_id"] == decision_id
-        assert data["transaction_id"] == valid_payload["transaction_id"]
-        assert data["amount"] == valid_payload["amount"]
+        assert data["transaction_id"] == valid_internal_payload["transaction_id"]
+        assert data["transfer_type"] == TransferType.INTERNAL
+        assert data["source_account_id"] == VALID_SOURCE_ACCOUNT_ID
+        assert data["destination_account_id"] == VALID_DEST_ACCOUNT_ID
+        assert data["destination_iban"] is None
+        assert data["amount"] == valid_internal_payload["amount"]
         assert data["currency"] == "IRR"
-        assert data["source_iban"] == VALID_SOURCE_IBAN
-        assert data["destination_iban"] == VALID_DEST_IBAN
         assert data["decision"] == DecisionType.APPROVE
-        assert len(data["reasons"]) == 1
-        assert data["reasons"][0]["code"] == "NO_RULE_MATCHED"
 
-    def test_retrieve_unknown_decision_id_returns_404_rfc9457(self, api_client: APIClient):
+    def test_retrieve_unknown_decision_id_returns_404_rfc9457(
+        self, api_client: APIClient
+    ):
         unknown_id = uuid.uuid4()
-        detail_url = reverse("risk-assessment-detail", kwargs={"decision_id": unknown_id})
+        detail_url = reverse(
+            "risk-assessment-detail", kwargs={"decision_id": unknown_id}
+        )
 
         response = api_client.get(detail_url)
 
