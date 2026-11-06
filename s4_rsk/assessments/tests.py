@@ -83,7 +83,6 @@ class TestRiskAssessmentCreateAPI:
         assert response.status_code == 201
         data = response.json()
 
-        # Verify response contract (Section 6)
         assert "decision_id" in data
         assert data["transaction_id"] == valid_internal_payload["transaction_id"]
         assert data["decision"] == DecisionType.APPROVE
@@ -136,6 +135,18 @@ class TestRiskAssessmentCreateAPI:
         response = unauthenticated_client.post(url, data=valid_internal_payload, format="json")
 
         assert response.status_code == 401
+        assert RiskAssessment.objects.count() == 0
+
+    def test_authenticated_non_payment_service_role_returns_403(self, valid_internal_payload: dict):
+        client = APIClient()
+        manager_user = User.objects.create_user(username="risk-manager", password="test-password")
+        manager_user.groups.add(Group.objects.get_or_create(name="manager")[0])
+        client.force_authenticate(user=manager_user)
+
+        url = reverse("risk-assessment-create")
+        response = client.post(url, data=valid_internal_payload, format="json")
+
+        assert response.status_code == 403
         assert RiskAssessment.objects.count() == 0
 
     @pytest.mark.parametrize(
@@ -339,9 +350,7 @@ class TestRiskAssessmentIntegration:
         decision_id = created_data["decision_id"]
 
         # Step 2: GET to retrieve the persisted decision snapshot
-        detail_url = reverse(
-            "risk-assessment-detail", kwargs={"decision_id": decision_id}
-        )
+        detail_url = reverse("risk-assessment-detail", kwargs={"decision_id": decision_id})
         get_resp = api_client.get(detail_url, HTTP_X_CORRELATION_ID=correlation_id)
         assert get_resp.status_code == 200
         detail_data = get_resp.json()

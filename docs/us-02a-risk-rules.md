@@ -35,4 +35,4 @@ Keep bearer tokens only in local secret variables, never in tracked collection f
 Independent acceptance: migrate, load the fixture, log in, list two records,
 then verify forbidden/anonymous requests and follow a one-item cursor page.
 After stopping and restarting only the application process, the same records
-must remain. Swagger is `/api/docs/`; Bruno files are in `contracts/bruno`.
+must remain. Swagger is `/api/docs/`; Bruno files are in `../bruno`.
