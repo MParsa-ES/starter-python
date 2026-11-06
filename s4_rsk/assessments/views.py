@@ -1,5 +1,6 @@
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -11,6 +12,7 @@ from assessments.serializers import (
     RiskAssessmentResponseSerializer,
 )
 from assessments.services import evaluate_and_persist_assessment
+from common.permissions import IsPaymentService
 
 
 class RiskAssessmentCreateAPIView(APIView):
@@ -18,6 +20,8 @@ class RiskAssessmentCreateAPIView(APIView):
     POST /api/v1/risk-assessments
     Evaluates a payment transaction and persists the initial risk decision (US-01A).
     """
+
+    permission_classes = (IsAuthenticated, IsPaymentService)
 
     @extend_schema(
         operation_id="createRiskAssessment",
@@ -63,6 +67,8 @@ class RiskAssessmentDetailAPIView(APIView):
     GET /api/v1/risk-assessments/{decision_id}
     Retrieves a previously evaluated risk assessment and its reasons (US-01A).
     """
+
+    permission_classes = (IsAuthenticated, IsPaymentService)
 
     @extend_schema(
         operation_id="getRiskAssessmentById",

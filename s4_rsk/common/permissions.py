@@ -8,9 +8,14 @@ class IsRiskManager(BasePermission):
 
     def has_permission(self, request, view):
         user = request.user
+        return bool(user and user.is_authenticated and user.is_active and user.groups.filter(name="manager").exists())
+
+
+class IsPaymentService(BasePermission):
+    """Only a separately provisioned payment service account may assess transfers."""
+
+    def has_permission(self, request, view):
+        user = request.user
         return bool(
-            user
-            and user.is_authenticated
-            and user.is_active
-            and user.groups.filter(name="manager").exists()
+            user and user.is_authenticated and user.is_active and user.groups.filter(name="payment_service").exists()
         )
