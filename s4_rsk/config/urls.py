@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.contrib import admin
+from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
@@ -17,3 +19,7 @@ urlpatterns = [
     path("api/v1/", include("rules.urls")),
     path("api/v1/", include("reviews.urls")),
 ]
+
+# Gunicorn does not serve Django's development static files itself.
+if settings.DEBUG:
+    urlpatterns += staticfiles_urlpatterns()
