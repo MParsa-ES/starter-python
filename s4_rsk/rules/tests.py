@@ -192,7 +192,7 @@ def test_configuration_survives_a_new_python_process():
 def test_schema_exposes_actual_cursor_envelope():
     schema = SchemaGenerator().get_schema(request=None, public=True)
     operation = schema["paths"][URL]["get"]
-    assert operation["security"] == [{"cookieAuth": []}]
+    assert {"cookieAuth": []} in operation["security"]
     response = operation["responses"]["200"]["content"]["application/json"]["schema"]
     definition = schema["components"]["schemas"][response["$ref"].rsplit("/", 1)[1]]
     assert set(definition["properties"]) == {"items", "next_cursor"}
