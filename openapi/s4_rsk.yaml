@@ -282,7 +282,7 @@ paths:
                     name: Max single transfer
                     type: AMOUNT_LIMIT
                     parameters:
-                      max_amount: 50000000
+                      max_amount_irr: 50000000
                     enabled: true
                     effective_at: '2026-10-01T00:00:00Z'
                     revision: 1
@@ -376,7 +376,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RiskRulePage'
+                $ref: '#/components/schemas/RuleRevisionPage'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -1041,6 +1041,24 @@ components:
             $ref: '#/components/schemas/RiskRule'
         next_cursor:
           type: [string, 'null']
+    RuleRevision:
+      type: object
+      required: [revision, actor, changed_at, before, after]
+      properties:
+        revision: {type: integer, minimum: 1}
+        actor: {type: string, description: Authenticated user ID}
+        changed_at: {type: string, format: date-time}
+        before: {type: [object, 'null'], additionalProperties: true}
+        after: {type: object, additionalProperties: true}
+    RuleRevisionPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleRevision'
+        next_cursor: {type: [string, 'null']}
     BlockedIdentifierInput:
       type: object
       required: [kind, value, reason]

@@ -625,6 +625,23 @@ export interface components {
             items: components["schemas"]["RiskRule"][];
             next_cursor: string | null;
         };
+        RuleRevision: {
+            revision: number;
+            /** @description Authenticated user ID */
+            actor: string;
+            /** Format: date-time */
+            changed_at: string;
+            before: {
+                [key: string]: unknown;
+            } | null;
+            after: {
+                [key: string]: unknown;
+            };
+        };
+        RuleRevisionPage: {
+            items: components["schemas"]["RuleRevision"][];
+            next_cursor: string | null;
+        };
         BlockedIdentifierInput: {
             /** @enum {string} */
             kind: "IBAN";
@@ -1037,7 +1054,7 @@ export interface operations {
                      *           "name": "Max single transfer",
                      *           "type": "AMOUNT_LIMIT",
                      *           "parameters": {
-                     *             "max_amount": 50000000
+                     *             "max_amount_irr": 50000000
                      *           },
                      *           "enabled": true,
                      *           "effective_at": "2026-10-01T00:00:00Z",
@@ -1138,7 +1155,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RiskRulePage"];
+                    "application/json": components["schemas"]["RuleRevisionPage"];
                 };
             };
             403: components["responses"]["Forbidden"];

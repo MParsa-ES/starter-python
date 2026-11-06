@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from django.contrib.auth.models import Group
@@ -139,17 +140,17 @@ def test_bad_cursor_returns_problem_details(manager_client):
     assert response.json()["code"] == "NOT_FOUND"
 
 
-def test_authenticated_unsafe_requests_are_not_allowed(manager_client):
+def test_invalid_create_is_rejected(manager_client):
     response = manager_client.post(URL, {}, format="json")
-    assert response.status_code == 405
+    assert response.status_code == 400
     assert RiskRule.objects.count() == 0
 
 
-def test_endpoint_does_not_allow_writes(manager):
+def test_incomplete_create_is_rejected(manager):
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {AccessToken.for_user(manager)}")
     response = client.post(URL, {"name": "Unauthorized write"}, format="json")
-    assert response.status_code == 405
+    assert response.status_code == 400
     assert RiskRule.objects.count() == 0
 
 
@@ -181,6 +182,7 @@ def test_configuration_survives_a_new_python_process():
             f"from rules.models import RiskRule; assert RiskRule.objects.get(pk='{rule.id}').name == 'Persistent rule'",
         ],
         env=environment,
+        cwd=Path(__file__).resolve().parent.parent,
         capture_output=True,
         text=True,
         timeout=30,
