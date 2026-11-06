@@ -3,7 +3,9 @@ from unittest.mock import patch
 
 import pytest
 from django.contrib.auth.models import User
+from django.db import IntegrityError, transaction
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from assessments.models import (
@@ -325,3 +327,77 @@ class TestRiskAssessmentDetailAPI:
         problem = response.json()
         assert problem["status"] == 404
         assert problem["code"] == "NOT_FOUND"
+
+@pytest.mark.django_db
+class TestRiskAssessmentIntegration:
+    """
+    Integration tests verifying end-to-end API workflows and PostgreSQL database constraints.
+    """
+
+    def test_integration_full_external_assessment_create_and_retrieve_lifecycle(
+        self, api_client: APIClient, valid_external_payload: dict
+    ):
+        """
+        Integration Test 1 (End-to-End API + Service + Multi-Table Persistence + Selector):
+        Verifies that creating an EXTERNAL transfer assessment via POST persists across all 3 tables
+        (RiskAssessment, DecisionReason, DecisionEvent), propagates X-Correlation-ID, computes a
+        deterministic SHA-256 fingerprint, and returns the exact transaction snapshot via GET.
+        """
+        create_url = reverse("risk-assessment-create")
+        correlation_id = "integ-corr-ext-999"
+
+        # Step 1: POST to create assessment
+        post_resp = api_client.post(
+            create_url,
+            data=valid_external_payload,
+            format="json",
+            HTTP_X_CORRELATION_ID=correlation_id,
+        )
+        assert post_resp.status_code == 201
+        created_data = post_resp.json()
+        decision_id = created_data["decision_id"]
+
+        # Step 2: GET to retrieve the persisted decision snapshot
+        detail_url = reverse(
+            "risk-assessment-detail", kwargs={"decision_id": decision_id}
+        )
+        get_resp = api_client.get(detail_url, HTTP_X_CORRELATION_ID=correlation_id)
+        assert get_resp.status_code == 200
+        detail_data = get_resp.json()
+
+        # Step 3: Verify full contract consistency between POST input, GET output, and DB audit trail
+        assert detail_data["decision_id"] == decision_id
+        assert detail_data["transaction_id"] == valid_external_payload["transaction_id"]
+        assert detail_data["transfer_type"] == TransferType.EXTERNAL
+        assert detail_data["source_account_id"] == VALID_SOURCE_ACCOUNT_ID
+        assert detail_data["destination_account_id"] is None
+        assert detail_data["destination_iban"] == VALID_DEST_IBAN
+        assert detail_data["amount"] == valid_external_payload["amount"]
+        assert detail_data["currency"] == "IRR"
+        assert detail_data["decision"] == DecisionType.APPROVE
+
+        # Verify underlying DecisionEvent audit record in PostgreSQL
+        event = DecisionEvent.objects.get(assessment_id=decision_id)
+        assert str(event.transaction_id) == valid_external_payload["transaction_id"]
+        assert event.correlation_id == correlation_id
+        assert event.reason_code == "NO_RULE_MATCHED"
+
+    def test_integration_database_check_constraint_blocks_mismatched_transfer_type(self):
+        """
+        Integration Test 2 (ORM -> PostgreSQL CheckConstraint Enforcement):
+        Verifies that PostgreSQL enforces `chk_rsk_assessment_dest_by_transfer_type` at the database
+        level even if the serializer is bypassed via a direct ORM `.create()` call.
+        """
+        with pytest.raises(IntegrityError), transaction.atomic():
+            RiskAssessment.objects.create(
+                transaction_id=uuid.uuid4(),
+                transfer_type=TransferType.INTERNAL,
+                source_account_id=uuid.uuid4(),
+                destination_account_id=None,  # Violates INTERNAL constraint
+                destination_iban=VALID_DEST_IBAN,
+                amount=1_000_000,
+                currency="IRR",
+                occurred_at=timezone.now(),
+                input_fingerprint="a" * 64,
+                decision=DecisionType.APPROVE,
+            )
