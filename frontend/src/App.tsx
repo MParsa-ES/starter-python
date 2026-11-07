@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import "./App.css";
+import { ProblemDetails } from "./ProblemDetails";
+import { readProblem, type ProblemDetailsBody } from "./problem";
 
 // آدرس بک‌اند از متغیر محیطی Vite خوانده می‌شود (فایل .env.local)؛ در کد ثابت نیست.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8084";
@@ -8,6 +10,7 @@ type HealthResponse = { status: string; service: string };
 type State =
   | { kind: "loading" }
   | { kind: "ok"; data: HealthResponse; httpStatus: number; ms: number }
+  | { kind: "problem"; problem: ProblemDetailsBody }
   | { kind: "error"; message: string };
 
 function HealthPage() {
@@ -20,7 +23,14 @@ function HealthPage() {
       const res = await fetch(`${API_BASE_URL}/health`, {
         headers: { Accept: "application/json" },
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const problem = await readProblem(res);
+        if (problem) {
+          setState({ kind: "problem", problem });
+          return;
+        }
+        throw new Error(`HTTP ${res.status}`);
+      }
       const data = (await res.json()) as HealthResponse;
       setState({
         kind: "ok",
@@ -69,6 +79,8 @@ function HealthPage() {
           <pre dir="ltr">{JSON.stringify(state.data, null, 2)}</pre>
         </>
       )}
+
+      {state.kind === "problem" && <ProblemDetails problem={state.problem} />}
 
       {state.kind === "error" && (
         <p className="badge err">خطا: {state.message}</p>
