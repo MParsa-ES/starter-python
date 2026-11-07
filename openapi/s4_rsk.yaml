@@ -282,7 +282,7 @@ paths:
                     name: Max single transfer
                     type: AMOUNT_LIMIT
                     parameters:
-                      max_amount_irr: 50000000
+                      max_amount: 50000000
                     enabled: true
                     effective_at: '2026-10-01T00:00:00Z'
                     revision: 1
@@ -964,6 +964,7 @@ components:
           type: [string, 'null']
     RiskRuleInput:
       type: object
+      description: For AMOUNT_LIMIT, parameters.max_amount is a positive integer amount in IRR (maximum 9223372036854775807).
       required: [name, type, parameters]
       properties:
         name:
@@ -984,6 +985,7 @@ components:
           format: date-time
     RiskRulePatch:
       type: object
+      description: For AMOUNT_LIMIT, parameters.max_amount is a positive integer amount in IRR (maximum 9223372036854775807).
       required: [expected_revision]
       properties:
         expected_revision:

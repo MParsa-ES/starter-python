@@ -21,33 +21,33 @@ def manager(django_user_model):
 
 
 def test_create_and_update_record_before_after_and_actor(manager):
-    rule = create_rule(actor=manager, name="limit", type="AMOUNT_LIMIT", parameters={"max_amount_irr": 100})
+    rule = create_rule(actor=manager, name="limit", type="AMOUNT_LIMIT", parameters={"max_amount": 100})
     created = rule.history.get(revision=1)
     assert created.before is None
-    assert created.after["parameters"] == {"max_amount_irr": 100}
+    assert created.after["parameters"] == {"max_amount": 100}
     assert created.actor == manager
     assert created.changed_at is not None
 
-    update_rule(actor=manager, rule_id=rule.pk, expected_revision=1, changes={"parameters": {"max_amount_irr": 200}})
+    update_rule(actor=manager, rule_id=rule.pk, expected_revision=1, changes={"parameters": {"max_amount": 200}})
     rule.refresh_from_db()
     updated = rule.history.get(revision=2)
     assert rule.revision == 2
-    assert updated.before["parameters"] == {"max_amount_irr": 100}
+    assert updated.before["parameters"] == {"max_amount": 100}
     assert updated.before["revision"] == 1
-    assert updated.after["parameters"] == {"max_amount_irr": 200}
+    assert updated.after["parameters"] == {"max_amount": 200}
     assert updated.after["revision"] == 2
-    assert created.after["parameters"] == {"max_amount_irr": 100}
+    assert created.after["parameters"] == {"max_amount": 100}
 
 
 @pytest.mark.parametrize(
     "parameters",
     [
         {},
-        {"max_amount_irr": 0},
-        {"max_amount_irr": -1},
-        {"max_amount_irr": True},
-        {"max_amount_irr": 1.5},
-        {"max_amount_irr": 2**63},
+        {"max_amount": 0},
+        {"max_amount": -1},
+        {"max_amount": True},
+        {"max_amount": 1.5},
+        {"max_amount": 2**63},
         [],
         None,
     ],
@@ -61,17 +61,17 @@ def test_invalid_amount_parameters_do_not_create_rule_or_history(manager, parame
 
 @pytest.mark.parametrize("amount", [1, 2**63 - 1])
 def test_valid_amount_boundaries(manager, amount):
-    rule = create_rule(actor=manager, name="limit", type="AMOUNT_LIMIT", parameters={"max_amount_irr": amount})
+    rule = create_rule(actor=manager, name="limit", type="AMOUNT_LIMIT", parameters={"max_amount": amount})
     assert rule.history.count() == 1
 
 
 def test_stale_revision_and_invalid_update_do_not_change_state(manager):
-    rule = create_rule(actor=manager, name="limit", type="AMOUNT_LIMIT", parameters={"max_amount_irr": 100})
+    rule = create_rule(actor=manager, name="limit", type="AMOUNT_LIMIT", parameters={"max_amount": 100})
     with pytest.raises(LabBankAPIException) as error:
         update_rule(actor=manager, rule_id=rule.pk, expected_revision=2, changes={"name": "changed"})
     assert error.value.status_code == 409
     with pytest.raises(ValidationError):
-        update_rule(actor=manager, rule_id=rule.pk, expected_revision=1, changes={"parameters": {"max_amount_irr": 0}})
+        update_rule(actor=manager, rule_id=rule.pk, expected_revision=1, changes={"parameters": {"max_amount": 0}})
     rule.refresh_from_db()
     assert rule.revision == 1
     assert rule.name == "limit"

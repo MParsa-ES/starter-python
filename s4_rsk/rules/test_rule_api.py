@@ -25,7 +25,7 @@ def client_manager(django_user_model):
 
 @pytest.fixture
 def payload():
-    return {"name": "limit", "type": "AMOUNT_LIMIT", "parameters": {"max_amount_irr": 100}}
+    return {"name": "limit", "type": "AMOUNT_LIMIT", "parameters": {"max_amount": 100}}
 
 
 def test_create_update_and_read_audit(client_manager, payload):
@@ -35,15 +35,15 @@ def test_create_update_and_read_audit(client_manager, payload):
     rule_id = created.data["id"]
     assert created.data["revision"] == 1
     changed = client.patch(
-        f"{URL}/{rule_id}", {"expected_revision": 1, "parameters": {"max_amount_irr": 200}}, format="json"
+        f"{URL}/{rule_id}", {"expected_revision": 1, "parameters": {"max_amount": 200}}, format="json"
     )
     assert changed.status_code == 200
     assert changed.data["revision"] == 2
     history = client.get(f"{URL}/{rule_id}/audit").data["items"]
     assert [item["revision"] for item in history] == [2, 1]
     assert history[0]["actor"] == str(user.pk)
-    assert history[0]["before"]["parameters"] == {"max_amount_irr": 100}
-    assert history[0]["after"]["parameters"] == {"max_amount_irr": 200}
+    assert history[0]["before"]["parameters"] == {"max_amount": 100}
+    assert history[0]["after"]["parameters"] == {"max_amount": 200}
     assert history[1]["before"] is None
 
 
@@ -71,7 +71,7 @@ def test_same_key_cannot_leak_response_to_another_manager(client_manager, payloa
 
 @pytest.mark.parametrize(
     "parameters",
-    [{}, {"max_amount_irr": 0}, {"max_amount_irr": -1}, {"max_amount_irr": True}, {"max_amount_irr": 2**63}, []],
+    [{}, {"max_amount": 0}, {"max_amount": -1}, {"max_amount": True}, {"max_amount": 2**63}, []],
 )
 def test_invalid_parameters_rejected_without_side_effects(client_manager, payload, parameters):
     client, _ = client_manager
@@ -87,7 +87,7 @@ def test_stale_and_invalid_patch_leave_original_unchanged(client_manager, payloa
     assert client.patch(f"{URL}/{rule_id}", {"expected_revision": 2, "name": "new"}, format="json").status_code == 409
     assert (
         client.patch(
-            f"{URL}/{rule_id}", {"expected_revision": 1, "parameters": {"max_amount_irr": 0}}, format="json"
+            f"{URL}/{rule_id}", {"expected_revision": 1, "parameters": {"max_amount": 0}}, format="json"
         ).status_code
         == 400
     )

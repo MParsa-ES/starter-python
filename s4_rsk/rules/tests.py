@@ -41,7 +41,7 @@ def make_rule(**kwargs):
 
 
 def test_manager_reads_stored_configuration(manager_client):
-    rule = make_rule(parameters={"max_amount_irr": 5000000}, enabled=False, revision=2)
+    rule = make_rule(parameters={"max_amount": 5000000}, enabled=False, revision=2)
     response = manager_client.get(URL, HTTP_X_CORRELATION_ID="rules-list-test")
     assert response.status_code == 200
     assert response["X-Correlation-ID"] == "rules-list-test"
@@ -51,7 +51,7 @@ def test_manager_reads_stored_configuration(manager_client):
                 "id": str(rule.id),
                 "name": rule.name,
                 "type": "AMOUNT_LIMIT",
-                "parameters": {"max_amount_irr": 5000000},
+                "parameters": {"max_amount": 5000000},
                 "enabled": False,
                 "revision": 2,
                 "effective_at": rule.effective_at.isoformat().replace("+00:00", "Z"),

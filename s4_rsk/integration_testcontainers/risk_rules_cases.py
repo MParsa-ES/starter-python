@@ -2,6 +2,7 @@ import pytest
 from django.contrib.auth.models import Group
 from django.db import connection
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import AccessToken
 
 from rules.models import RiskRule
 
@@ -23,18 +24,14 @@ def test_manager_reads_rule_from_temporary_postgresql(django_user_model):
     rule = RiskRule.objects.create(
         name="Transfer amount limit",
         type=RiskRule.Type.AMOUNT_LIMIT,
-        parameters={"max_amount_irr": 5_000_000},
+        parameters={"max_amount": 5_000_000},
         enabled=False,
         revision=1,
     )
 
-    # Logging in the user and requesting the list of rules.
+    # Authenticate with the same JWT mechanism used by the API.
     client = APIClient()
-
-    assert client.login(
-        username="test-risk-manager",
-        password="test-only-password",
-    )
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {AccessToken.for_user(manager)}")
 
     response = client.get("/api/v1/risk-rules")
 
@@ -48,7 +45,7 @@ def test_manager_reads_rule_from_temporary_postgresql(django_user_model):
     assert data["items"][0]["name"] == "Transfer amount limit"
     assert data["items"][0]["type"] == "AMOUNT_LIMIT"
     assert data["items"][0]["parameters"] == {
-        "max_amount_irr": 5_000_000
+        "max_amount": 5_000_000
     }
     assert data["items"][0]["enabled"] is False
     assert data["next_cursor"] is None
@@ -75,10 +72,7 @@ def test_rule_list_caps_page_size_at_200(django_user_model):
 
     client = APIClient()
 
-    assert client.login(
-        username="pagination-manager",
-        password="test-only-password",
-    )
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {AccessToken.for_user(manager)}")
 
     response = client.get(
         "/api/v1/risk-rules",

@@ -580,6 +580,7 @@ export interface components {
             items: components["schemas"]["DecisionEvent"][];
             next_cursor: string | null;
         };
+        /** @description For AMOUNT_LIMIT, parameters.max_amount is a positive integer amount in IRR (maximum 9223372036854775807). */
         RiskRuleInput: {
             name: string;
             /** @enum {string} */
@@ -592,6 +593,7 @@ export interface components {
             /** Format: date-time */
             effective_at?: string;
         };
+        /** @description For AMOUNT_LIMIT, parameters.max_amount is a positive integer amount in IRR (maximum 9223372036854775807). */
         RiskRulePatch: {
             /** @description Revision the client last saw; a mismatch returns 409. */
             expected_revision: number;
@@ -1054,7 +1056,7 @@ export interface operations {
                      *           "name": "Max single transfer",
                      *           "type": "AMOUNT_LIMIT",
                      *           "parameters": {
-                     *             "max_amount_irr": 50000000
+                     *             "max_amount": 50000000
                      *           },
                      *           "enabled": true,
                      *           "effective_at": "2026-10-01T00:00:00Z",
