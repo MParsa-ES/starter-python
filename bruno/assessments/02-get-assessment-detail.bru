@@ -7,7 +7,11 @@ meta {
 get {
   url: http://localhost:8084/api/v1/risk-assessments/{{last_decision_id}}
   body: none
-  auth: inherit
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_access_token}}
 }
 
 tests {
