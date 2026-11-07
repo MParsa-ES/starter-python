@@ -1,7 +1,8 @@
-import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
-from assessments.models import RiskAssessment, DecisionType
+import pytest
+
+from assessments.models import DecisionType, RiskAssessment
 from dashboard.selectors import count_decisions_by_type
 
 

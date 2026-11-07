@@ -5,8 +5,11 @@ Everything else (service, view) stays independent of the models.
 """
 
 from datetime import datetime
+
 from django.db.models import Count
+
 from assessments.models import RiskAssessment
+
 
 def count_decisions_by_type(start: datetime, end: datetime) -> dict[str, int]:
     """Count initial assessment decisions with start <= evaluated_at < end.
