@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from django.contrib.auth.models import Group
@@ -40,7 +41,7 @@ def make_rule(**kwargs):
 
 
 def test_manager_reads_stored_configuration(manager_client):
-    rule = make_rule(parameters={"max_amount_irr": 5000000}, enabled=False, revision=2)
+    rule = make_rule(parameters={"max_amount": 5000000}, enabled=False, revision=2)
     response = manager_client.get(URL, HTTP_X_CORRELATION_ID="rules-list-test")
     assert response.status_code == 200
     assert response["X-Correlation-ID"] == "rules-list-test"
@@ -50,7 +51,7 @@ def test_manager_reads_stored_configuration(manager_client):
                 "id": str(rule.id),
                 "name": rule.name,
                 "type": "AMOUNT_LIMIT",
-                "parameters": {"max_amount_irr": 5000000},
+                "parameters": {"max_amount": 5000000},
                 "enabled": False,
                 "revision": 2,
                 "effective_at": rule.effective_at.isoformat().replace("+00:00", "Z"),
@@ -139,17 +140,17 @@ def test_bad_cursor_returns_problem_details(manager_client):
     assert response.json()["code"] == "NOT_FOUND"
 
 
-def test_authenticated_unsafe_requests_are_not_allowed(manager_client):
+def test_invalid_create_is_rejected(manager_client):
     response = manager_client.post(URL, {}, format="json")
-    assert response.status_code == 405
+    assert response.status_code == 400
     assert RiskRule.objects.count() == 0
 
 
-def test_endpoint_does_not_allow_writes(manager):
+def test_incomplete_create_is_rejected(manager):
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {AccessToken.for_user(manager)}")
     response = client.post(URL, {"name": "Unauthorized write"}, format="json")
-    assert response.status_code == 405
+    assert response.status_code == 400
     assert RiskRule.objects.count() == 0
 
 
@@ -181,6 +182,7 @@ def test_configuration_survives_a_new_python_process():
             f"from rules.models import RiskRule; assert RiskRule.objects.get(pk='{rule.id}').name == 'Persistent rule'",
         ],
         env=environment,
+        cwd=Path(__file__).resolve().parent.parent,
         capture_output=True,
         text=True,
         timeout=30,
