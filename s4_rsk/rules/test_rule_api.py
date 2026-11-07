@@ -56,6 +56,11 @@ def test_post_replay_and_conflict(client_manager, payload):
     assert first.data == replay.data
     conflict = client.post(URL, {**payload, "name": "different"}, format="json", HTTP_IDEMPOTENCY_KEY=key)
     assert conflict.status_code == 409
+    assert conflict.data["code"] == "IDEMPOTENCY_KEY_REUSED"
+    assert conflict["Content-Type"] == "application/problem+json"
+    invalid_body = client.post(URL, {}, format="json", HTTP_IDEMPOTENCY_KEY=key)
+    assert invalid_body.status_code == 409
+    assert invalid_body.data["code"] == "IDEMPOTENCY_KEY_REUSED"
     assert RiskRule.objects.count() == RuleRevision.objects.count() == 1
 
 
@@ -66,7 +71,16 @@ def test_same_key_cannot_leak_response_to_another_manager(client_manager, payloa
     other = django_user_model.objects.create_user("other-manager")
     other.groups.add(Group.objects.get(name="manager"))
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {AccessToken.for_user(other)}")
-    assert client.post(URL, payload, format="json", HTTP_IDEMPOTENCY_KEY=key).status_code == 409
+    response = client.post(URL, payload, format="json", HTTP_IDEMPOTENCY_KEY=key)
+    assert response.status_code == 409
+    assert response.data["code"] == "IDEMPOTENCY_KEY_REUSED"
+
+
+def test_invalid_first_request_does_not_consume_idempotency_key(client_manager, payload):
+    client, _ = client_manager
+    key = str(uuid.uuid4())
+    assert client.post(URL, {}, format="json", HTTP_IDEMPOTENCY_KEY=key).status_code == 400
+    assert client.post(URL, payload, format="json", HTTP_IDEMPOTENCY_KEY=key).status_code == 201
 
 
 @pytest.mark.parametrize(
@@ -84,7 +98,9 @@ def test_invalid_parameters_rejected_without_side_effects(client_manager, payloa
 def test_stale_and_invalid_patch_leave_original_unchanged(client_manager, payload):
     client, _ = client_manager
     rule_id = client.post(URL, payload, format="json").data["id"]
-    assert client.patch(f"{URL}/{rule_id}", {"expected_revision": 2, "name": "new"}, format="json").status_code == 409
+    stale = client.patch(f"{URL}/{rule_id}", {"expected_revision": 2, "name": "new"}, format="json")
+    assert stale.status_code == 409
+    assert stale.data["code"] == "CONFLICT"
     assert (
         client.patch(
             f"{URL}/{rule_id}", {"expected_revision": 1, "parameters": {"max_amount": 0}}, format="json"

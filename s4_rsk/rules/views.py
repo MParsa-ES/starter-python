@@ -59,8 +59,6 @@ class RiskRuleListView(ListAPIView):
         responses={201: RiskRuleSerializer, 400: ProblemSerializer, 409: ProblemSerializer},
     )
     def post(self, request):
-        serializer = RiskRuleInputSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
         key = request.headers.get("Idempotency-Key")
         if key is not None:
             try:
@@ -80,9 +78,11 @@ class RiskRuleListView(ListAPIView):
                     if not created:
                         if record.actor_id != request.user.pk or record.fingerprint != fingerprint:
                             raise LabBankAPIException(
-                                "CONFLICT", "Conflict", "Idempotency key already used.", 409, "conflict"
+                                "IDEMPOTENCY_KEY_REUSED", "Conflict", "Idempotency key already used.", 409, "conflict"
                             )
                         return Response(record.response, status=status.HTTP_201_CREATED)
+                serializer = RiskRuleInputSerializer(data=request.data)
+                serializer.is_valid(raise_exception=True)
                 rule = create_rule(actor=request.user, **serializer.validated_data)
                 data = dict(RiskRuleSerializer(rule).data)
                 if record is not None:

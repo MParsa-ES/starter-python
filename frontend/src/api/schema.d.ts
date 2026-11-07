@@ -240,7 +240,10 @@ export interface paths {
          */
         get: operations["risk_rules_list"];
         put?: never;
-        /** Create a risk rule */
+        /**
+         * Create a risk rule
+         * @description Reusing an Idempotency-Key with a different body returns 409 with code `IDEMPOTENCY_KEY_REUSED`.
+         */
         post: operations["createRiskRule"];
         delete?: never;
         options?: never;

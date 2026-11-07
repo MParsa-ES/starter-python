@@ -12,7 +12,7 @@
 ## گردش آزمون در Swagger
 
 1. `GET /api/v1/risk-rules` را با Try it out و Execute اجرا کنید. پاسخ 200 و `items` و `next_cursor` است. `limit` اندازه صفحه است و `cursor` پاسخ قبلی را برای صفحه بعد می‌دهید.
-2. `POST /api/v1/risk-rules` را اجرا کنید. `Idempotency-Key` اختیاری و از نوع UUID است. برای retry امن یک UUID جدید برای هر عملیات منطقی تولید کنید؛ تکرار همان کلید با همان بدنه پاسخ 201 اولیه را برمی‌گرداند و بدنه یا کاربر متفاوت 409 می‌دهد. بدون کلید، تکرار POST یک قانون جدید می‌سازد.
+2. `POST /api/v1/risk-rules` را اجرا کنید. `Idempotency-Key` اختیاری و از نوع UUID است. برای retry امن یک UUID جدید برای هر عملیات منطقی تولید کنید؛ تکرار همان کلید با همان بدنه پاسخ 201 اولیه را برمی‌گرداند و بدنه یا کاربر متفاوت 409 با کد `IDEMPOTENCY_KEY_REUSED` می‌دهد. بدون کلید، تکرار POST یک قانون جدید می‌سازد.
 
 ```json
 {"name":"Demo limit","type":"AMOUNT_LIMIT","parameters":{"max_amount":100},"enabled":false}

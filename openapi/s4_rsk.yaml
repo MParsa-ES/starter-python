@@ -299,6 +299,7 @@ paths:
       security:
         - bearerAuth: []
       summary: Create a risk rule
+      description: Reusing an Idempotency-Key with a different body returns 409 with code `IDEMPOTENCY_KEY_REUSED`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
