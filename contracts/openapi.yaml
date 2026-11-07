@@ -5,6 +5,151 @@ info:
   description: Real-time transaction risk evaluation, dynamic rule engine, blocklist,
     and manual review service.
 paths:
+  /api/v1/auth/token/:
+    post:
+      operationId: api_v1_auth_token_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /api/v1/auth/token/logout/:
+    post:
+      operationId: api_v1_auth_token_logout_create
+      description: |-
+        Takes a token and blacklists it. Must be used with the
+        `rest_framework_simplejwt.token_blacklist` app installed.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenBlacklist'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenBlacklist'
+          description: ''
+  /api/v1/auth/token/refresh/:
+    post:
+      operationId: api_v1_auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/v1/risk-assessments:
+    post:
+      operationId: createRiskAssessment
+      description: |-
+        POST /api/v1/risk-assessments
+        Evaluates a payment transaction and persists the initial risk decision (US-01A).
+      summary: Evaluate transaction risk and persist decision
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+          format: uuid
+        description: Unique key to guarantee idempotent assessment creation.
+      - in: header
+        name: X-Correlation-ID
+        schema:
+          type: string
+        description: Distributed tracing correlation identifier.
+      tags:
+      - Risk Assessments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskAssessmentRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskAssessmentResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/risk-assessments/{decision_id}:
+    get:
+      operationId: getRiskAssessmentById
+      description: |-
+        GET /api/v1/risk-assessments/{decision_id}
+        Retrieves a previously evaluated risk assessment and its reasons (US-01A).
+      summary: Retrieve a risk assessment decision by decision_id
+      parameters:
+      - in: path
+        name: decision_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Risk Assessments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskAssessmentDetailResponse'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
   /api/v1/risk-rules:
     get:
       operationId: risk_rules_list
@@ -31,7 +176,7 @@ paths:
       tags:
       - api
       security:
-      - cookieAuth: []
+      - jwtAuth: []
       responses:
         '200':
           headers:
@@ -138,6 +283,40 @@ components:
       - CONNECTED
       type: string
       description: '* `CONNECTED` - CONNECTED'
+    DecisionEnum:
+      enum:
+      - APPROVE
+      - REJECT
+      - REVIEW
+      type: string
+      description: |-
+        * `APPROVE` - APPROVE
+        * `REJECT` - REJECT
+        * `REVIEW` - REVIEW
+    DecisionReasonResponse:
+      type: object
+      description: Output contract for a single reason item.
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        rule_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        rule_revision:
+          type:
+          - integer
+          - 'null'
+        rule_snapshot:
+          oneOf:
+          - {}
+          - type: 'null'
+      required:
+      - code
+      - message
     Health:
       type: object
       properties:
@@ -208,6 +387,110 @@ components:
       - READY
       type: string
       description: '* `READY` - READY'
+    RiskAssessmentDetailResponse:
+      type: object
+      description: |-
+        Extend output contract for GET /api/v1/risk-assessments/{decision_id}
+        inluding transaction context and snapshot details.
+      properties:
+        decision_id:
+          type: string
+          format: uuid
+        transaction_id:
+          type: string
+          format: uuid
+        decision:
+          $ref: '#/components/schemas/DecisionEnum'
+        evaluated_at:
+          type: string
+          format: date-time
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/DecisionReasonResponse'
+        amount:
+          type: integer
+        currency:
+          type: string
+        source_iban:
+          type: string
+        destination_iban:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+      required:
+      - amount
+      - currency
+      - decision
+      - decision_id
+      - destination_iban
+      - evaluated_at
+      - occurred_at
+      - reasons
+      - source_iban
+      - transaction_id
+    RiskAssessmentRequest:
+      type: object
+      description: Input contract for POST /api/v1/risk-assessments (Section 6).
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+          description: Unique transaction UUID generated by S3-PAY.
+        amount:
+          type: integer
+          description: Transfer amount in IRR (strictly positive int64 integer).
+        currency:
+          type: string
+          description: Must be 'IRR'.
+          maxLength: 3
+        source_iban:
+          type: string
+          description: Source Iranian IBAN (IR + 24 ASCII digits).
+          maxLength: 26
+        destination_iban:
+          type: string
+          description: Destination Iranian IBAN (IR + 24 ASCII digits).
+          maxLength: 26
+        occurred_at:
+          type: string
+          format: date-time
+          description: ISO-8601 UTC timestamp of the transaction.
+      required:
+      - amount
+      - currency
+      - destination_iban
+      - occurred_at
+      - source_iban
+      - transaction_id
+    RiskAssessmentResponse:
+      type: object
+      description: |-
+        Output contract for POST /api/v1/risk-assessments (201 Craeted)
+        and GET /api/v1/risk-assessments/{decision_id} (200 OK)
+      properties:
+        decision_id:
+          type: string
+          format: uuid
+        transaction_id:
+          type: string
+          format: uuid
+        decision:
+          $ref: '#/components/schemas/DecisionEnum'
+        evaluated_at:
+          type: string
+          format: date-time
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/DecisionReasonResponse'
+      required:
+      - decision
+      - decision_id
+      - evaluated_at
+      - reasons
+      - transaction_id
     RiskRule:
       type: object
       properties:
@@ -252,6 +535,45 @@ components:
       - revision
       - type
       - updated_at
+    TokenBlacklist:
+      type: object
+      properties:
+        refresh:
+          type: string
+          writeOnly: true
+      required:
+      - refresh
+    TokenObtainPair:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - password
+      - refresh
+      - username
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
     TypeEnum:
       enum:
       - AMOUNT_LIMIT
@@ -261,7 +583,7 @@ components:
         * `AMOUNT_LIMIT` - Amount limit
         * `BLOCKLIST` - Blocklist
   securitySchemes:
-    cookieAuth:
-      type: apiKey
-      in: cookie
-      name: sessionid
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -2,7 +2,7 @@ import uuid
 from unittest.mock import patch
 
 import pytest
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -31,6 +31,7 @@ def api_client(db) -> APIClient:
         password="test-password",
         is_staff=True,
     )
+    user.groups.add(Group.objects.get_or_create(name="payment_service")[0])
     client.force_authenticate(user=user)
     return client
 
@@ -62,7 +63,7 @@ class TestRiskAssessmentCreateAPI:
 
         response = unauthenticated_client.post(url, data=valid_payload, format="json")
 
-        assert response.status_code == 403
+        assert response.status_code == 401
         assert RiskAssessment.objects.count() == 0
 
     def test_create_assessment_success_persists_records(self, api_client: APIClient, valid_payload: dict):

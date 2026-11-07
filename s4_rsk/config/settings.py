@@ -1,3 +1,4 @@
+from datetime import timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -47,6 +48,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # Third-party apps
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "drf_spectacular",
     # S4-RSK Local Apps
@@ -115,7 +117,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Django REST Framework Settings
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
@@ -129,6 +131,24 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "common.pagination.LabBankCursorPagination",
     "EXCEPTION_HANDLER": "common.exceptions.rfc9457_exception_handler",
+    "DEFAULT_THROTTLE_RATES": {"anon": "10/minute"},
+}
+
+JWT_SIGNING_KEY = env("JWT_SIGNING_KEY", default=SECRET_KEY if DEBUG else None)
+if not DEBUG and (not JWT_SIGNING_KEY or JWT_SIGNING_KEY == SECRET_KEY):
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured("Set a distinct JWT_SIGNING_KEY when DEBUG=False.")
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=5),
+    "REFRESH_TOKEN_LIFETIME": timedelta(hours=8),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "CHECK_REVOKE_TOKEN": True,
+    "ISSUER": "labbank-s4-rsk",
+    "AUDIENCE": "labbank-s4-rsk-api",
+    "SIGNING_KEY": JWT_SIGNING_KEY,
 }
 
 # GEN-01: OpenAPI 3.1 Specification Settings
