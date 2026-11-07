@@ -59,18 +59,12 @@ the database. `/ready` queries PostgreSQL and returns
 
 ## Authentication baseline
 
-Management endpoints use Django sessions. Unsafe authenticated requests must
-include the CSRF cookie and `X-CSRFToken`. The `manager`, `operator` and
-`analyst` roles are Django groups; the initial rule list requires `manager`.
-The staff flag grants no API role by itself. See
-[ADR-001](docs/adr/ADR-001-authentication.md) for the exact 403 problem codes,
-same-origin UI contract and pending S3 authentication decision.
-
-For local Swagger use, create an interactive account with
-`python s4_rsk/manage.py createsuperuser`, log into `/admin/login/`, create the
-`manager` group and explicitly assign it to that account. Do not store real
-passwords in fixtures or request collections. Production requires `DEBUG=False`,
-a non-development `SECRET_KEY`, HTTPS, correct `ALLOWED_HOSTS` and secure cookies.
+API endpoints use Bearer JWT; Django admin retains session authentication.
+The risk-rule list requires group `manager`, while assessment endpoints require
+the separate `payment_service` group. See [JWT instructions](docs/reports/jwt-authentication.md)
+and the [draft S3 contract](contracts/s3-s4-jwt-draft.md). Production requires
+HTTPS, a strong `SECRET_KEY`, a distinct `JWT_SIGNING_KEY`, shared rate-limiting,
+secure deployment settings, and agreement with S3 on service identity.
 
 ## Tests and schema validation
 

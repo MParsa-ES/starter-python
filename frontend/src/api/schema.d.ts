@@ -4,6 +4,147 @@
  */
 
 export interface paths {
+    "/auth/token/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Obtain access and refresh JWTs */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        username: string;
+                        /** Format: password */
+                        password: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Access and refresh JWTs */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            access: string;
+                            refresh: string;
+                        };
+                    };
+                };
+                /** @description Invalid credentials */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/token/refresh/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate a refresh token and obtain new tokens */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        refresh: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description New access and refresh JWTs */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Invalid or revoked refresh token */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/token/logout/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke a refresh token */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        refresh: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Refresh token revoked */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/risk-assessments": {
         parameters: {
             query?: never;
@@ -484,6 +625,23 @@ export interface components {
             items: components["schemas"]["RiskRule"][];
             next_cursor: string | null;
         };
+        RuleRevision: {
+            revision: number;
+            /** @description Authenticated user ID */
+            actor: string;
+            /** Format: date-time */
+            changed_at: string;
+            before: {
+                [key: string]: unknown;
+            } | null;
+            after: {
+                [key: string]: unknown;
+            };
+        };
+        RuleRevisionPage: {
+            items: components["schemas"]["RuleRevision"][];
+            next_cursor: string | null;
+        };
         BlockedIdentifierInput: {
             /** @enum {string} */
             kind: "IBAN";
@@ -597,7 +755,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description No valid session (`UNAUTHORIZED`) or missing role (`FORBIDDEN`). */
+        /** @description The authenticated caller lacks the required role (`FORBIDDEN`). */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -896,7 +1054,7 @@ export interface operations {
                      *           "name": "Max single transfer",
                      *           "type": "AMOUNT_LIMIT",
                      *           "parameters": {
-                     *             "max_amount": 50000000
+                     *             "max_amount_irr": 50000000
                      *           },
                      *           "enabled": true,
                      *           "effective_at": "2026-10-01T00:00:00Z",
@@ -997,7 +1155,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RiskRulePage"];
+                    "application/json": components["schemas"]["RuleRevisionPage"];
                 };
             };
             403: components["responses"]["Forbidden"];

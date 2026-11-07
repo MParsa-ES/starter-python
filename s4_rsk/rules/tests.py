@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 from django.contrib.auth.models import Group
@@ -9,6 +10,7 @@ from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 from drf_spectacular.generators import SchemaGenerator
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import AccessToken
 
 from .models import RiskRule
 
@@ -28,7 +30,7 @@ def manager(django_user_model):
 @pytest.fixture
 def manager_client(manager):
     client = APIClient(enforce_csrf_checks=True)
-    assert client.login(username=manager.username, password="test-only-password")
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {AccessToken.for_user(manager)}")
     return client
 
 
@@ -68,7 +70,7 @@ def test_empty_configuration_has_explicit_empty_page(manager_client):
 
 def test_anonymous_session_is_denied():
     response = APIClient().get(URL)
-    assert response.status_code == 403
+    assert response.status_code == 401
     assert response["Content-Type"] == "application/problem+json"
     assert response.json()["code"] == "UNAUTHORIZED"
 
@@ -79,7 +81,7 @@ def test_non_managers_are_denied(role, django_user_model):
     if role:
         user.groups.add(Group.objects.get_or_create(name=role)[0])
     client = APIClient()
-    client.force_login(user)
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {AccessToken.for_user(user)}")
     response = client.get(URL)
     assert response.status_code == 403
     assert response.json()["code"] == "FORBIDDEN"
@@ -90,7 +92,7 @@ def test_superuser_without_manager_group_is_denied(django_user_model):
         "admin", is_staff=True, is_superuser=True
     )
     client = APIClient()
-    client.force_login(user)
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {AccessToken.for_user(user)}")
     response = client.get(URL)
     assert response.status_code == 403
     assert response.json()["code"] == "FORBIDDEN"
@@ -100,7 +102,7 @@ def test_inactive_manager_session_is_denied(manager_client, manager):
     manager.is_active = False
     manager.save(update_fields=["is_active"])
     response = manager_client.get(URL)
-    assert response.status_code == 403
+    assert response.status_code == 401
     assert response.json()["code"] == "UNAUTHORIZED"
 
 
@@ -138,18 +140,17 @@ def test_bad_cursor_returns_problem_details(manager_client):
     assert response.json()["code"] == "NOT_FOUND"
 
 
-def test_authenticated_unsafe_requests_still_require_csrf(manager_client):
+def test_invalid_create_is_rejected(manager_client):
     response = manager_client.post(URL, {}, format="json")
-    assert response.status_code == 403
-    assert response.json()["code"] == "FORBIDDEN"
+    assert response.status_code == 400
     assert RiskRule.objects.count() == 0
 
 
-def test_endpoint_does_not_allow_writes(manager):
+def test_incomplete_create_is_rejected(manager):
     client = APIClient()
-    client.force_login(manager)
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {AccessToken.for_user(manager)}")
     response = client.post(URL, {"name": "Unauthorized write"}, format="json")
-    assert response.status_code == 405
+    assert response.status_code == 400
     assert RiskRule.objects.count() == 0
 
 
@@ -181,6 +182,7 @@ def test_configuration_survives_a_new_python_process():
             f"from rules.models import RiskRule; assert RiskRule.objects.get(pk='{rule.id}').name == 'Persistent rule'",
         ],
         env=environment,
+        cwd=Path(__file__).resolve().parent.parent,
         capture_output=True,
         text=True,
         timeout=30,
@@ -192,7 +194,7 @@ def test_configuration_survives_a_new_python_process():
 def test_schema_exposes_actual_cursor_envelope():
     schema = SchemaGenerator().get_schema(request=None, public=True)
     operation = schema["paths"][URL]["get"]
-    assert operation["security"] == [{"cookieAuth": []}]
+    assert operation["security"] == [{"jwtAuth": []}]
     response = operation["responses"]["200"]["content"]["application/json"]["schema"]
     definition = schema["components"]["schemas"][response["$ref"].rsplit("/", 1)[1]]
     assert set(definition["properties"]) == {"items", "next_cursor"}
