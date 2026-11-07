@@ -143,6 +143,9 @@ def test_bad_cursor_returns_problem_details(manager_client):
 def test_invalid_create_is_rejected(manager_client):
     response = manager_client.post(URL, {}, format="json")
     assert response.status_code == 400
+def test_authenticated_unsafe_requests_are_not_allowed(manager_client):
+    response = manager_client.post(URL, {}, format="json")
+    assert response.status_code == 405
     assert RiskRule.objects.count() == 0
 
 
