@@ -299,6 +299,7 @@ paths:
       security:
         - bearerAuth: []
       summary: Create a risk rule
+      description: Reusing an Idempotency-Key with a different body returns 409 with code `IDEMPOTENCY_KEY_REUSED`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -376,7 +377,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RiskRulePage'
+                $ref: '#/components/schemas/RuleRevisionPage'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -964,6 +965,7 @@ components:
           type: [string, 'null']
     RiskRuleInput:
       type: object
+      description: For AMOUNT_LIMIT, parameters.max_amount is a positive integer amount in IRR (maximum 9223372036854775807).
       required: [name, type, parameters]
       properties:
         name:
@@ -984,6 +986,7 @@ components:
           format: date-time
     RiskRulePatch:
       type: object
+      description: For AMOUNT_LIMIT, parameters.max_amount is a positive integer amount in IRR (maximum 9223372036854775807).
       required: [expected_revision]
       properties:
         expected_revision:
@@ -1041,6 +1044,24 @@ components:
             $ref: '#/components/schemas/RiskRule'
         next_cursor:
           type: [string, 'null']
+    RuleRevision:
+      type: object
+      required: [revision, actor, changed_at, before, after]
+      properties:
+        revision: {type: integer, minimum: 1}
+        actor: {type: string, description: Authenticated user ID}
+        changed_at: {type: string, format: date-time}
+        before: {type: [object, 'null'], additionalProperties: true}
+        after: {type: object, additionalProperties: true}
+    RuleRevisionPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleRevision'
+        next_cursor: {type: [string, 'null']}
     BlockedIdentifierInput:
       type: object
       required: [kind, value, reason]

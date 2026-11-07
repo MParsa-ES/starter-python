@@ -240,7 +240,10 @@ export interface paths {
          */
         get: operations["risk_rules_list"];
         put?: never;
-        /** Create a risk rule */
+        /**
+         * Create a risk rule
+         * @description Reusing an Idempotency-Key with a different body returns 409 with code `IDEMPOTENCY_KEY_REUSED`.
+         */
         post: operations["createRiskRule"];
         delete?: never;
         options?: never;
@@ -580,6 +583,7 @@ export interface components {
             items: components["schemas"]["DecisionEvent"][];
             next_cursor: string | null;
         };
+        /** @description For AMOUNT_LIMIT, parameters.max_amount is a positive integer amount in IRR (maximum 9223372036854775807). */
         RiskRuleInput: {
             name: string;
             /** @enum {string} */
@@ -592,6 +596,7 @@ export interface components {
             /** Format: date-time */
             effective_at?: string;
         };
+        /** @description For AMOUNT_LIMIT, parameters.max_amount is a positive integer amount in IRR (maximum 9223372036854775807). */
         RiskRulePatch: {
             /** @description Revision the client last saw; a mismatch returns 409. */
             expected_revision: number;
@@ -623,6 +628,23 @@ export interface components {
         };
         RiskRulePage: {
             items: components["schemas"]["RiskRule"][];
+            next_cursor: string | null;
+        };
+        RuleRevision: {
+            revision: number;
+            /** @description Authenticated user ID */
+            actor: string;
+            /** Format: date-time */
+            changed_at: string;
+            before: {
+                [key: string]: unknown;
+            } | null;
+            after: {
+                [key: string]: unknown;
+            };
+        };
+        RuleRevisionPage: {
+            items: components["schemas"]["RuleRevision"][];
             next_cursor: string | null;
         };
         BlockedIdentifierInput: {
@@ -1138,7 +1160,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RiskRulePage"];
+                    "application/json": components["schemas"]["RuleRevisionPage"];
                 };
             };
             403: components["responses"]["Forbidden"];

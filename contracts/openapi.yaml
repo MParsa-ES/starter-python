@@ -150,8 +150,6 @@ paths:
   /api/v1/risk-rules:
     get:
       operationId: risk_rules_list
-      description: List stored rule configuration, including disabled and future rules.
-        Requires the manager group; this endpoint does not evaluate rules.
       parameters:
       - in: header
         name: X-Correlation-ID
@@ -208,6 +206,126 @@ paths:
               required: true
           content:
             application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+    post:
+      operationId: createRiskRule
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: UUID for safe retries
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskRuleInput'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRule'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+  /api/v1/risk-rules/{rule_id}:
+    patch:
+      operationId: updateRiskRule
+      parameters:
+      - in: path
+        name: rule_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRiskRulePatch'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRule'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+  /api/v1/risk-rules/{rule_id}/audit:
+    get:
+      operationId: listRiskRuleAudit
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: path
+        name: rule_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRuleRevisionList'
+          description: ''
+        '404':
+          content:
+            application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
           description: ''
@@ -343,6 +461,37 @@ components:
           type:
           - string
           - 'null'
+    PaginatedRuleRevisionList:
+      type: object
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleRevision'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+    PatchedRiskRulePatch:
+      type: object
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+          maxLength: 120
+        parameters:
+          type: object
+          additionalProperties: {}
+        enabled:
+          type: boolean
+        effective_at:
+          type: string
+          format: date-time
     Problem:
       type: object
       properties:
@@ -571,6 +720,52 @@ components:
       - revision
       - type
       - updated_at
+    RiskRuleInput:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        type:
+          $ref: '#/components/schemas/TypeEnum'
+        parameters:
+          type: object
+          additionalProperties: {}
+        enabled:
+          type: boolean
+        effective_at:
+          type: string
+          format: date-time
+      required:
+      - name
+      - parameters
+      - type
+    RuleRevision:
+      type: object
+      properties:
+        revision:
+          type: integer
+          readOnly: true
+        actor:
+          type: string
+          readOnly: true
+        changed_at:
+          type: string
+          format: date-time
+          readOnly: true
+        before:
+          oneOf:
+          - {}
+          - type: 'null'
+          readOnly: true
+        after:
+          readOnly: true
+      required:
+      - actor
+      - after
+      - before
+      - changed_at
+      - revision
     TokenBlacklist:
       type: object
       properties:
