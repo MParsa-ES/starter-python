@@ -5,7 +5,7 @@
     "fields": {
       "name": "Development amount limit (disabled example)",
       "type": "AMOUNT_LIMIT",
-      "parameters": {"max_amount_irr": 100000000, "decision": "REVIEW"},
+      "parameters": {"max_amount": 100000000, "decision": "REVIEW"},
       "enabled": false,
       "effective_at": "2026-10-24T00:00:00Z",
       "revision": 1,

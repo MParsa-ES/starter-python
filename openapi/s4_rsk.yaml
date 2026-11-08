@@ -12,13 +12,12 @@ info:
     every mutating POST accepts `Idempotency-Key`, lists use `limit` (max 200) and `cursor`,
     and field names are snake_case.
 
-    Authentication (ADR-001): Django session. A missing/invalid session and a missing role both
-    return 403; clients tell them apart by the problem `code` (`UNAUTHORIZED` or `FORBIDDEN`).
+    Authentication: Bearer JWT. Missing or invalid tokens return 401; insufficient role returns 403.
 servers:
   - url: http://localhost:8084/api/v1
     description: Local development
 security:
-  - sessionAuth: []
+  - bearerAuth: []
 tags:
   - name: Risk Assessments
     description: Evaluate a transfer and read persisted decisions (loop endpoint with S3-PAY).
@@ -35,13 +34,69 @@ tags:
   - name: Operations
     description: Liveness and readiness probes.
 paths:
+  /auth/token/:
+    post:
+      security: []
+      summary: Obtain access and refresh JWTs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: {type: string}
+                password: {type: string, format: password}
+      responses:
+        '200':
+          description: Access and refresh JWTs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access, refresh]
+                properties:
+                  access: {type: string}
+                  refresh: {type: string}
+        '401': {description: Invalid credentials}
+  /auth/token/refresh/:
+    post:
+      security: []
+      summary: Rotate a refresh token and obtain new tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh]
+              properties:
+                refresh: {type: string}
+      responses:
+        '200': {description: New access and refresh JWTs}
+        '401': {description: Invalid or revoked refresh token}
+  /auth/token/logout/:
+    post:
+      security: []
+      summary: Revoke a refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh]
+              properties:
+                refresh: {type: string}
+      responses:
+        '200': {description: Refresh token revoked}
   /risk-assessments:
     post:
       tags: [Risk Assessments]
       operationId: createRiskAssessment
       security:
-        - sessionAuth: []
-          csrfToken: []
+        - bearerAuth: []
       summary: Evaluate a transfer and persist the initial decision
       description: |
         Called by S3-PAY before executing a transfer. S4-RSK evaluates the transfer against the
@@ -242,9 +297,9 @@ paths:
       tags: [Risk Rules]
       operationId: createRiskRule
       security:
-        - sessionAuth: []
-          csrfToken: []
+        - bearerAuth: []
       summary: Create a risk rule
+      description: Reusing an Idempotency-Key with a different body returns 409 with code `IDEMPOTENCY_KEY_REUSED`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -271,8 +326,7 @@ paths:
       tags: [Risk Rules]
       operationId: updateRiskRule
       security:
-        - sessionAuth: []
-          csrfToken: []
+        - bearerAuth: []
       summary: Change a rule with optimistic revision control
       description: A stale `expected_revision` is rejected with 409 `CONFLICT`.
       parameters:
@@ -323,7 +377,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RiskRulePage'
+                $ref: '#/components/schemas/RuleRevisionPage'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -357,8 +411,7 @@ paths:
       tags: [Blocked Identifiers]
       operationId: createBlockedIdentifier
       security:
-        - sessionAuth: []
-          csrfToken: []
+        - bearerAuth: []
       summary: Block an IBAN
       description: Only one active record may exist per identifier; a second one returns 409 `CONFLICT`.
       parameters:
@@ -387,8 +440,7 @@ paths:
       tags: [Blocked Identifiers]
       operationId: deactivateBlockedIdentifier
       security:
-        - sessionAuth: []
-          csrfToken: []
+        - bearerAuth: []
       summary: Deactivate a blocked identifier (soft delete, audit is kept)
       parameters:
         - name: id
@@ -433,8 +485,7 @@ paths:
       tags: [Manual Review]
       operationId: claimReviewItem
       security:
-        - sessionAuth: []
-          csrfToken: []
+        - bearerAuth: []
       summary: Claim a queue item atomically
       description: Only one operator can claim an item; a second claim returns 409 `CONFLICT`.
       parameters:
@@ -463,8 +514,7 @@ paths:
       tags: [Manual Review]
       operationId: decideReviewItem
       security:
-        - sessionAuth: []
-          csrfToken: []
+        - bearerAuth: []
       summary: Final human decision on a claimed item
       description: Only the operator who claimed the item may decide; a reason is mandatory.
       parameters:
@@ -573,8 +623,7 @@ paths:
       tags: [Deliveries]
       operationId: retryDelivery
       security:
-        - sessionAuth: []
-          csrfToken: []
+        - bearerAuth: []
       summary: Retry a failed delivery manually
       parameters:
         - name: delivery_id
@@ -644,18 +693,10 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 components:
   securitySchemes:
-    sessionAuth:
-      type: apiKey
-      in: cookie
-      name: sessionid
-      description: Django session cookie (ADR-001). Unsafe methods also require the CSRF token.
-    csrfToken:
-      type: apiKey
-      in: header
-      name: X-CSRFToken
-      description: |
-        Value of the `csrftoken` cookie, required on unsafe methods (POST, PATCH, DELETE) for
-        session-authenticated clients (ADR-001). Without it the service answers 403.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   headers:
     XCorrelationId:
       description: Trace identifier of this response, also present in the logs.
@@ -711,7 +752,7 @@ components:
             detail: start must not be later than end.
             correlation_id: 7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33
     Forbidden:
-      description: No valid session (`UNAUTHORIZED`) or missing role (`FORBIDDEN`).
+      description: The authenticated caller lacks the required role (`FORBIDDEN`).
       content:
         application/problem+json:
           schema:
@@ -924,6 +965,7 @@ components:
           type: [string, 'null']
     RiskRuleInput:
       type: object
+      description: For AMOUNT_LIMIT, parameters.max_amount is a positive integer amount in IRR (maximum 9223372036854775807).
       required: [name, type, parameters]
       properties:
         name:
@@ -944,6 +986,7 @@ components:
           format: date-time
     RiskRulePatch:
       type: object
+      description: For AMOUNT_LIMIT, parameters.max_amount is a positive integer amount in IRR (maximum 9223372036854775807).
       required: [expected_revision]
       properties:
         expected_revision:
@@ -1001,6 +1044,24 @@ components:
             $ref: '#/components/schemas/RiskRule'
         next_cursor:
           type: [string, 'null']
+    RuleRevision:
+      type: object
+      required: [revision, actor, changed_at, before, after]
+      properties:
+        revision: {type: integer, minimum: 1}
+        actor: {type: string, description: Authenticated user ID}
+        changed_at: {type: string, format: date-time}
+        before: {type: [object, 'null'], additionalProperties: true}
+        after: {type: object, additionalProperties: true}
+    RuleRevisionPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleRevision'
+        next_cursor: {type: [string, 'null']}
     BlockedIdentifierInput:
       type: object
       required: [kind, value, reason]
