@@ -8,6 +8,11 @@ class DecisionType(models.TextChoices):
     REVIEW = "REVIEW", "Review"
 
 
+class TransferType(models.TextChoices):
+    INTERNAL = "INTERNAL", "Internal LabBank Transfer"
+    EXTERNAL = "EXTERNAL", "External Interbank Transfer"
+
+
 class EventType(models.TextChoices):
     INITIAL_EVALUATION = "INITIAL_EVALUATION", "Initial Automated Evaluation"
     MANUAL_DECISION = "MANUAL_DECISION", "Manual Operator Decision"
@@ -25,33 +30,43 @@ class RiskAssessment(models.Model):
         help_text="Public UUIDv7 identifier for this assessment decision",
     )
 
-    transaction_id = models.UUIDField(
-        db_index=True, help_text="UUID of the payment transfer owned by S3-Pay"
-    )
+    transaction_id = models.UUIDField(db_index=True, help_text="UUID of the payment transfer owned by S3-Pay")
 
-    amount = models.BigIntegerField(
-        help_text="Transaction amount in IRR (positive integer)"
-    )
-
-    currency = models.CharField(max_length=3, default="IRR")
-
-    source_iban = models.CharField(
-        max_length=26,
+    transfer_type = models.CharField(
+        max_length=10,
+        choices=TransferType.choices,
+        default=TransferType.INTERNAL,
         db_index=True,
+        help_text="INTERNAL (account_id) or EXTERNAL (IBAN) transfer",
+    )
+
+    source_account_id = models.UUIDField(
+        db_index=True,
+        help_text="UUID of the sender account shared with S1 and S2",
+    )
+
+    destination_account_id = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="UUID of the destination account for INTERNAL transfers",
     )
 
     destination_iban = models.CharField(
         max_length=26,
+        null=True,
+        blank=True,
         db_index=True,
+        help_text="Destination Iranian IBAN for EXTERNAL transfers",
     )
 
-    occurred_at = models.DateTimeField(
-        help_text="Date and time at which the transaction occured in S3-Pay"
-    )
+    amount = models.BigIntegerField(help_text="Transaction amount in IRR (positive integer)")
 
-    input_fingerprint = models.CharField(
-        max_length=64, help_text="SHA-256 hash of the assessment request payload"
-    )
+    currency = models.CharField(max_length=3, default="IRR")
+
+    occurred_at = models.DateTimeField(help_text="Date and time at which the transaction occured in S3-Pay")
+
+    input_fingerprint = models.CharField(max_length=64, help_text="SHA-256 hash of the assessment request payload")
 
     decision = models.CharField(
         max_length=10,
@@ -90,12 +105,36 @@ class RiskAssessment(models.Model):
                 condition=models.Q(currency="IRR"),
                 name="chk_rsk_assessment_currency_irr",
             ),
-        ]
-        indexes = [
-            models.Index(
-                fields=["-created_at", "-decision_id"], name="idx_rsk_assessment_cursor"
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        transfer_type="INTERNAL",
+                        destination_account_id__isnull=False,
+                        destination_iban__isnull=True,
+                    )
+                    | models.Q(
+                        transfer_type="EXTERNAL",
+                        destination_iban__isnull=False,
+                        destination_account_id__isnull=True,
+                    )
+                ),
+                name="chk_rsk_assessment_dest_by_transfer_type",
             ),
         ]
+        indexes = [
+            models.Index(fields=["-created_at", "-decision_id"], name="idx_rsk_assessment_cursor"),
+        ]
+
+    @property
+    def destination_target(self) -> str:
+        """
+        Unified target identifier string for Rule Engine / Blocklist evaluation.
+        Returns destination_account_id as string for INTERNAL transfers,
+        or destination_iban for EXTERNAL transfers.
+        """
+        if self.transfer_type == TransferType.INTERNAL:
+            return str(self.destination_account_id)
+        return self.destination_iban or ""
 
     def __str__(self):
         return f"Assessment {self.decision_id} (tx={self.transaction_id}) -> {self.decision}"
@@ -170,9 +209,7 @@ class DecisionEvent(models.Model):
         editable=False,
     )
 
-    assessment = models.ForeignKey(
-        RiskAssessment, on_delete=models.PROTECT, related_name="events"
-    )
+    assessment = models.ForeignKey(RiskAssessment, on_delete=models.PROTECT, related_name="events")
 
     transaction_id = models.UUIDField(
         db_index=True,
@@ -210,7 +247,6 @@ class DecisionEvent(models.Model):
                 name="idx_rsk_decision_event_tx",
             ),
         ]
+
     def __str__(self):
         return f"Event {self.event_id} {self.event_type} -> {self.decision}"
-
-

@@ -1,0 +1,39 @@
+meta {
+  name: 03 - Reject Invalid Amount and Missing Destination (400)
+  type: http
+  seq: 3
+}
+
+post {
+  url: http://localhost:8084/api/v1/risk-assessments
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_access_token}}
+}
+
+body:json {
+  {
+    "transaction_id": "0192f5a0-7c1e-7d3a-9b2f-3c4d5e6f7a8b",
+    "transfer_type": "INTERNAL",
+    "source_account_id": "0192a7d1-0001-7000-8000-00000000a001",
+    "amount": -500,
+    "currency": "IRR",
+    "occurred_at": "2026-10-24T08:30:00Z"
+  }
+}
+
+tests {
+  test("Status code is 400 Bad Request", function() {
+    expect(res.getStatus()).to.equal(400);
+  });
+  
+  test("Returns RFC 9457 Problem Details with VALIDATION_ERROR", function() {
+    const body = res.getBody();
+    expect(res.getHeader("content-type")).to.include("application/problem+json");
+    expect(body.status).to.equal(400);
+    expect(body.code).to.equal("VALIDATION_ERROR");
+  });
+}

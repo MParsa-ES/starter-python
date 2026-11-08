@@ -13,6 +13,7 @@ from assessments.serializers import (
 )
 from assessments.services import evaluate_and_persist_assessment
 from common.permissions import IsPaymentService
+from common.serializers import ProblemSerializer
 
 
 class RiskAssessmentCreateAPIView(APIView):
@@ -45,8 +46,8 @@ class RiskAssessmentCreateAPIView(APIView):
         request=RiskAssessmentRequestSerializer,
         responses={
             201: RiskAssessmentResponseSerializer,
-            400: OpenApiTypes.OBJECT,
-            409: OpenApiTypes.OBJECT,
+            400: ProblemSerializer,
+            409: ProblemSerializer,
         },
         tags=["Risk Assessments"],
     )
@@ -54,9 +55,7 @@ class RiskAssessmentCreateAPIView(APIView):
         input_serializer = RiskAssessmentRequestSerializer(data=request.data)
         input_serializer.is_valid(raise_exception=True)
 
-        assessment = evaluate_and_persist_assessment(
-            **input_serializer.validated_data
-        )
+        assessment = evaluate_and_persist_assessment(**input_serializer.validated_data)
 
         output_serializer = RiskAssessmentResponseSerializer(assessment)
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
@@ -75,7 +74,7 @@ class RiskAssessmentDetailAPIView(APIView):
         summary="Retrieve a risk assessment decision by decision_id",
         responses={
             200: RiskAssessmentDetailResponseSerializer,
-            404: OpenApiTypes.OBJECT,
+            404: ProblemSerializer,
         },
         tags=["Risk Assessments"],
     )

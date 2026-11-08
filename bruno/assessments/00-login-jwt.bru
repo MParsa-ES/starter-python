@@ -1,0 +1,32 @@
+meta {
+  name: 00 - Obtain JWT Token (200)
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://localhost:8084/api/v1/auth/token/
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "s3-service",
+    "password": "s3pass123"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("jwt_access_token", res.getBody().access);
+  }
+}
+
+tests {
+  test("Status code is 200 OK and returns access token", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().access).to.be.a("string");
+    expect(res.getBody().refresh).to.be.a("string");
+  });
+}
