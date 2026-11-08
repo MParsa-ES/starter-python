@@ -1,0 +1,27 @@
+meta {
+  name: 04 - Get Unknown Decision ID (404)
+  type: http
+  seq: 4
+}
+
+get {
+  url: http://localhost:8084/api/v1/risk-assessments/0192f5a0-0000-7000-8000-999999999999
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_access_token}}
+}
+
+tests {
+  test("Status code is 404 Not Found", function() {
+    expect(res.getStatus()).to.equal(404);
+  });
+  
+  test("Returns RFC 9457 NOT_FOUND Problem Details", function() {
+    const body = res.getBody();
+    expect(body.status).to.equal(404);
+    expect(body.code).to.equal("NOT_FOUND");
+  });
+}

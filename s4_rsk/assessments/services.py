@@ -16,53 +16,55 @@ from common.middleware import get_correlation_id
 DEFAULT_APPROVE_CODE = "NO_RULE_MATCHED"
 DEFAULT_APPROVE_MESSAGE = "No blocking rule matched"
 
-def compute_input_fingerprint(payload:dict) -> str :
+def compute_input_fingerprint(payload: dict) -> str:
     """
-    Computes a deterministic SHA-256 hash of the canonical request payload
-    :param payload:
-    :return:
+    Computes a deterministic SHA-256 hash of the canonical request payload (Section 5).
     """
-
     canonical_dict = {
         "transaction_id": str(payload["transaction_id"]),
+        "transfer_type": str(payload["transfer_type"]),
+        "source_account_id": str(payload["source_account_id"]),
+        "destination_account_id": (
+            str(payload["destination_account_id"])
+            if payload.get("destination_account_id") is not None
+            else None
+        ),
+        "destination_iban": payload.get("destination_iban"),
         "amount": int(payload["amount"]),
         "currency": str(payload["currency"]),
-        "source_iban":str(payload["source_iban"]),
-        "destination_iban":str(payload["destination_iban"]),
-        "occurred_at":payload["occurred_at"].isoformat(),
+        "occurred_at": payload["occurred_at"].isoformat(),
     }
     canonical_json = json.dumps(canonical_dict, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 
 @transaction.atomic
 def evaluate_and_persist_assessment(
-        *,transaction_id:UUID,
-        amount:int,
-        currency:str,
-        source_iban:str,
-        destination_iban:str,
-        occurred_at) -> RiskAssessment :
+    *,
+    transaction_id: UUID,
+    transfer_type: str,
+    source_account_id: UUID,
+    destination_account_id: UUID | None = None,
+    destination_iban: str | None = None,
+    amount: int,
+    currency: str,
+    occurred_at,
+) -> RiskAssessment:
     """
     US-01A Base Risk Assessment Service:
     Atomically evaluates the request using the base policy (APPROVE / NO_RULE_MATCHED)
     and persists RiskAssessment, DecisionReason, and initial DecisionEvent in one transaction.
-    :param transaction_id:
-    :param amount:
-    :param currency:
-    :param source_iban:
-    :param destination_iban:
-    :param occurred_at:
-    :return:
+
     """
     payload = {
         "transaction_id": transaction_id,
+        "transfer_type": transfer_type,
+        "source_account_id": source_account_id,
+        "destination_account_id": destination_account_id,
+        "destination_iban": destination_iban,
         "amount": amount,
         "currency": currency,
-        "source_iban": source_iban,
-        "destination_iban": destination_iban,
         "occurred_at": occurred_at,
     }
-
     fingerprint = compute_input_fingerprint(payload)
     correlation_id = get_correlation_id() or ""
 
@@ -73,10 +75,12 @@ def evaluate_and_persist_assessment(
 
     assessment = RiskAssessment.objects.create(
         transaction_id=transaction_id,
+        transfer_type=transfer_type,
+        source_account_id=source_account_id,
+        destination_account_id=destination_account_id,
+        destination_iban=destination_iban,
         amount=amount,
         currency=currency,
-        source_iban=source_iban,
-        destination_iban=destination_iban,
         occurred_at=occurred_at,
         input_fingerprint=fingerprint,
         decision=decision,

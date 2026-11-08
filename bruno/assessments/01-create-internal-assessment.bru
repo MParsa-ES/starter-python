@@ -1,0 +1,55 @@
+meta {
+  name: 01 - Create Internal Risk Assessment (201)
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://localhost:8084/api/v1/risk-assessments
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{jwt_access_token}}
+}
+
+headers {
+  X-Correlation-ID: bruno-corr-001
+  Idempotency-Key: 0192f5a0-1111-7aaa-8bbb-0123456789ab
+}
+
+body:json {
+  {
+    "transaction_id": "0192f5a0-7c1e-7d3a-9b2f-3c4d5e6f7a8b",
+    "transfer_type": "INTERNAL",
+    "source_account_id": "0192a7d1-0001-7000-8000-00000000a001",
+    "destination_account_id": "0192a7d1-0002-7000-8000-00000000a002",
+    "amount": 2500000,
+    "currency": "IRR",
+    "occurred_at": "2026-10-24T08:30:00Z"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("last_decision_id", res.getBody().decision_id);
+  }
+}
+
+tests {
+  test("Status code is 201 Created", function() {
+    expect(res.getStatus()).to.equal(201);
+  });
+  
+  test("Decision is APPROVE with NO_RULE_MATCHED reason", function() {
+    const body = res.getBody();
+    expect(body.decision_id).to.be.a("string");
+    expect(body.decision).to.equal("APPROVE");
+    expect(body.reasons[0].code).to.equal("NO_RULE_MATCHED");
+  });
+  
+  test("Response echoes X-Correlation-ID header", function() {
+    expect(res.getHeader("x-correlation-id")).to.equal("bruno-corr-001");
+  });
+}
