@@ -24,7 +24,6 @@ class DecisionCountsSerializer(serializers.Serializer):
 
 
 class StatisticsResponseSerializer(serializers.Serializer):
-    """Shape of the statistics response (also used to document it in Swagger)."""
 
     start = serializers.DateTimeField()
     end = serializers.DateTimeField()

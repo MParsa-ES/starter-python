@@ -6,11 +6,7 @@ DECISION_TYPES = ("APPROVE", "REVIEW", "REJECT")
 
 
 def build_statistics(start: datetime, end: datetime) -> dict:
-    """Assemble the dashboard numbers for the half-open range [start, end).
-
-    Every decision type is always present in the result (0 when nothing was counted),
-    so an empty range gives zeros instead of missing keys.
-    """
+    """Assemble the dashboard numbers for the half-open range [start, end)."""
     counted = selectors.count_decisions_by_type(start, end)
     return {
         "start": start,

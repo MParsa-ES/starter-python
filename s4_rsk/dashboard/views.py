@@ -20,7 +20,7 @@ class RiskStatisticsView(APIView):
     )
     def get(self, request):
         query = StatisticsQuerySerializer(data=request.query_params)
-        query.is_valid(raise_exception=True)  # invalid input -> 400 Problem Details
+        query.is_valid(raise_exception=True)
 
         statistics = services.build_statistics(**query.validated_data)
         return Response(StatisticsResponseSerializer(statistics).data)
