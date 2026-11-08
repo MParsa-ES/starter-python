@@ -5,11 +5,151 @@ info:
   description: Real-time transaction risk evaluation, dynamic rule engine, blocklist,
     and manual review service.
 paths:
+  /api/v1/auth/token/:
+    post:
+      operationId: api_v1_auth_token_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /api/v1/auth/token/logout/:
+    post:
+      operationId: api_v1_auth_token_logout_create
+      description: |-
+        Takes a token and blacklists it. Must be used with the
+        `rest_framework_simplejwt.token_blacklist` app installed.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenBlacklist'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenBlacklist'
+          description: ''
+  /api/v1/auth/token/refresh/:
+    post:
+      operationId: api_v1_auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/v1/risk-assessments:
+    post:
+      operationId: createRiskAssessment
+      description: |-
+        POST /api/v1/risk-assessments
+        Evaluates a payment transaction and persists the initial risk decision (US-01A).
+      summary: Evaluate transaction risk and persist decision
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+          format: uuid
+        description: Unique key to guarantee idempotent assessment creation.
+      - in: header
+        name: X-Correlation-ID
+        schema:
+          type: string
+        description: Distributed tracing correlation identifier.
+      tags:
+      - Risk Assessments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskAssessmentRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskAssessmentResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+  /api/v1/risk-assessments/{decision_id}:
+    get:
+      operationId: getRiskAssessmentById
+      description: |-
+        GET /api/v1/risk-assessments/{decision_id}
+        Retrieves a previously evaluated risk assessment and its reasons (US-01A).
+      summary: Retrieve a risk assessment decision by decision_id
+      parameters:
+      - in: path
+        name: decision_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Risk Assessments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskAssessmentDetailResponse'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
   /api/v1/risk-rules:
     get:
       operationId: risk_rules_list
-      description: List stored rule configuration, including disabled and future rules.
-        Requires the manager group; this endpoint does not evaluate rules.
       parameters:
       - in: header
         name: X-Correlation-ID
@@ -31,7 +171,7 @@ paths:
       tags:
       - api
       security:
-      - cookieAuth: []
+      - jwtAuth: []
       responses:
         '200':
           headers:
@@ -66,6 +206,126 @@ paths:
               required: true
           content:
             application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+    post:
+      operationId: createRiskRule
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: UUID for safe retries
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskRuleInput'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRule'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+  /api/v1/risk-rules/{rule_id}:
+    patch:
+      operationId: updateRiskRule
+      parameters:
+      - in: path
+        name: rule_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRiskRulePatch'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRule'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+  /api/v1/risk-rules/{rule_id}/audit:
+    get:
+      operationId: listRiskRuleAudit
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: path
+        name: rule_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRuleRevisionList'
+          description: ''
+        '404':
+          content:
+            application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
           description: ''
@@ -138,6 +398,40 @@ components:
       - CONNECTED
       type: string
       description: '* `CONNECTED` - CONNECTED'
+    DecisionEnum:
+      enum:
+      - APPROVE
+      - REJECT
+      - REVIEW
+      type: string
+      description: |-
+        * `APPROVE` - APPROVE
+        * `REJECT` - REJECT
+        * `REVIEW` - REVIEW
+    DecisionReasonResponse:
+      type: object
+      description: Output contract for a single reason item.
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        rule_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        rule_revision:
+          type:
+          - integer
+          - 'null'
+        rule_snapshot:
+          oneOf:
+          - {}
+          - type: 'null'
+      required:
+      - code
+      - message
     Health:
       type: object
       properties:
@@ -167,6 +461,37 @@ components:
           type:
           - string
           - 'null'
+    PaginatedRuleRevisionList:
+      type: object
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleRevision'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+    PatchedRiskRulePatch:
+      type: object
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+          maxLength: 120
+        parameters:
+          type: object
+          additionalProperties: {}
+        enabled:
+          type: boolean
+        effective_at:
+          type: string
+          format: date-time
     Problem:
       type: object
       properties:
@@ -208,6 +533,149 @@ components:
       - READY
       type: string
       description: '* `READY` - READY'
+    RiskAssessmentDetailResponse:
+      type: object
+      description: |-
+        Extend output contract for GET /api/v1/risk-assessments/{decision_id}
+        including transaction context and snapshot details.
+      properties:
+        decision_id:
+          type: string
+          format: uuid
+        transaction_id:
+          type: string
+          format: uuid
+        decision:
+          $ref: '#/components/schemas/DecisionEnum'
+        evaluated_at:
+          type: string
+          format: date-time
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/DecisionReasonResponse'
+        transfer_type:
+          $ref: '#/components/schemas/TransferTypeEnum'
+        source_account_id:
+          type: string
+          format: uuid
+        destination_account_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        destination_iban:
+          type:
+          - string
+          - 'null'
+        amount:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 1
+          format: int64
+        currency:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+      required:
+      - amount
+      - currency
+      - decision
+      - decision_id
+      - destination_account_id
+      - destination_iban
+      - evaluated_at
+      - occurred_at
+      - reasons
+      - source_account_id
+      - transaction_id
+      - transfer_type
+    RiskAssessmentRequest:
+      type: object
+      description: |-
+        Input contract for POST /api/v1/risk-assessments (Section 6).
+        Enforces strict int64 positive IRR amounts and conditional destination fields based on `transfer_type`.
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+          description: Unique transaction UUID generated by S3-PAY.
+        transfer_type:
+          allOf:
+          - $ref: '#/components/schemas/TransferTypeEnum'
+          description: |-
+            INTERNAL (uses destination_account_id) or EXTERNAL (uses destination_iban).
+
+            * `INTERNAL` - Internal LabBank Transfer
+            * `EXTERNAL` - External Interbank Transfer
+        source_account_id:
+          type: string
+          format: uuid
+          description: UUID of the sender's LabBank account (shared with S1 and S2;
+            used by S4 to query S2 ledger history).
+        destination_account_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: Required when `transfer_type` is `INTERNAL` (must differ from
+            `source_account_id`). Must be null or omitted when `transfer_type` is
+            `EXTERNAL`.
+        destination_iban:
+          type:
+          - string
+          - 'null'
+          description: Required when `transfer_type` is `EXTERNAL` (IR + 24 ASCII
+            digits with valid ISO 13616 Mod-97 checksum). Must be null or omitted
+            when `transfer_type` is `INTERNAL`.
+          maxLength: 26
+          minLength: 26
+        amount:
+          type: integer
+          description: Transfer amount in IRR (strictly positive int64 integer).
+        currency:
+          type: string
+          description: Must be 'IRR'.
+          maxLength: 3
+        occurred_at:
+          type: string
+          format: date-time
+          description: ISO-8601 UTC timestamp of the transaction.
+      required:
+      - amount
+      - currency
+      - occurred_at
+      - source_account_id
+      - transaction_id
+      - transfer_type
+    RiskAssessmentResponse:
+      type: object
+      description: |-
+        Output contract for POST /api/v1/risk-assessments (201 Created)
+        and GET /api/v1/risk-assessments/{decision_id} (200 OK)
+      properties:
+        decision_id:
+          type: string
+          format: uuid
+        transaction_id:
+          type: string
+          format: uuid
+        decision:
+          $ref: '#/components/schemas/DecisionEnum'
+        evaluated_at:
+          type: string
+          format: date-time
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/DecisionReasonResponse'
+      required:
+      - decision
+      - decision_id
+      - evaluated_at
+      - reasons
+      - transaction_id
     RiskRule:
       type: object
       properties:
@@ -252,6 +720,99 @@ components:
       - revision
       - type
       - updated_at
+    RiskRuleInput:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        type:
+          $ref: '#/components/schemas/TypeEnum'
+        parameters:
+          type: object
+          additionalProperties: {}
+        enabled:
+          type: boolean
+        effective_at:
+          type: string
+          format: date-time
+      required:
+      - name
+      - parameters
+      - type
+    RuleRevision:
+      type: object
+      properties:
+        revision:
+          type: integer
+          readOnly: true
+        actor:
+          type: string
+          readOnly: true
+        changed_at:
+          type: string
+          format: date-time
+          readOnly: true
+        before:
+          oneOf:
+          - {}
+          - type: 'null'
+          readOnly: true
+        after:
+          readOnly: true
+      required:
+      - actor
+      - after
+      - before
+      - changed_at
+      - revision
+    TokenBlacklist:
+      type: object
+      properties:
+        refresh:
+          type: string
+          writeOnly: true
+      required:
+      - refresh
+    TokenObtainPair:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - password
+      - refresh
+      - username
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TransferTypeEnum:
+      enum:
+      - INTERNAL
+      - EXTERNAL
+      type: string
+      description: |-
+        * `INTERNAL` - Internal LabBank Transfer
+        * `EXTERNAL` - External Interbank Transfer
     TypeEnum:
       enum:
       - AMOUNT_LIMIT
@@ -261,7 +822,7 @@ components:
         * `AMOUNT_LIMIT` - Amount limit
         * `BLOCKLIST` - Blocklist
   securitySchemes:
-    cookieAuth:
-      type: apiKey
-      in: cookie
-      name: sessionid
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

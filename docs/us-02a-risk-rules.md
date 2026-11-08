@@ -3,9 +3,9 @@
 Owner: Ali. Reviewer: Abolfazl. US-02A is a plan identifier, not a Jira key.
 
 `GET /api/v1/risk-rules?limit=50&cursor=...` reads PostgreSQL records. It requires
-an active session user in the exact `manager` group. Anonymous/inactive sessions
-return 403 `UNAUTHORIZED`; authenticated users without that role return 403
-`FORBIDDEN`. Session behavior and pending S3 auth are documented in ADR-001.
+an active bearer JWT user in the exact `manager` group. Missing/invalid credentials
+return 401 `UNAUTHORIZED`; authenticated users without that role return 403
+`FORBIDDEN`. See the JWT guide and the draft S3 contract for authentication details.
 
 The response is `{ "items": [...], "next_cursor": null }`. Follow the opaque
 `next_cursor` using the same limit until null. The default page size is 50 and
@@ -29,11 +29,10 @@ After migrating a **development database**, opt in to the fixture:
 
 Do not load fixtures into shared/production databases. Loading this fixture
 again resets its two fixed development records. No account/password is seeded.
-For Swagger, create an interactive staff account and explicitly assign manager
-as described in the README. Copy that account's session cookie only into local
-Bruno variables, never into tracked collection files.
+For Swagger, create an account and assign manager as described in the JWT guide.
+Keep bearer tokens only in local secret variables, never in tracked collection files.
 
 Independent acceptance: migrate, load the fixture, log in, list two records,
 then verify forbidden/anonymous requests and follow a one-item cursor page.
 After stopping and restarting only the application process, the same records
-must remain. Swagger is `/api/docs/`; Bruno files are in `contracts/bruno`.
+must remain. Swagger is `/api/docs/`; Bruno files are in `../bruno`.

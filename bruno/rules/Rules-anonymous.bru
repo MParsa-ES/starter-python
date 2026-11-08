@@ -12,7 +12,7 @@ get {
 
 tests {
   test("Anonymous session is rejected", function () {
-    expect(res.getStatus()).to.equal(403);
+    expect(res.getStatus()).to.equal(401);
     expect(res.getBody().code).to.equal("UNAUTHORIZED");
   });
 }

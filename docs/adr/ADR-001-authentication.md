@@ -1,6 +1,7 @@
 # ADR-001: Initial management API authentication
 
-Status: implemented baseline for review; service-to-service authentication pending.
+Status: superseded by the JWT implementation. See docs/reports/jwt-authentication.md and
+contracts/s3-s4-jwt-draft.md. The historical session-based decision follows.
 
 The management API uses Django sessions and DRF SessionAuthentication. Unsafe
 requests from authenticated clients require Django's CSRF cookie and
