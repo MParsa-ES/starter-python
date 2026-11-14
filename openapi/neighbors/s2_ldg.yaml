@@ -1,0 +1,117 @@
+# DRAFT of the S2-LDG endpoint that S4-RSK consumes.
+#
+# The field names below were derived from our own contract (openapi/s4_rsk.yaml,
+# "source_account_id") and the session-4 sequence diagram. They are an ASSUMPTION.
+# Replace this file with the real contract copied from the S2-LDG team's repository
+# (same path), then re-run the stub and contract tests; fix LedgerEntry and the
+# test data only where the real names differ.
+openapi: 3.1.0
+info:
+  title: S2-LDG ledger (consumer-side copy, draft)
+  version: 0.1.0-draft
+servers:
+  - url: http://localhost:8082
+paths:
+  /api/v1/accounts/{account_id}/entries:
+    get:
+      operationId: listAccountEntries
+      summary: Ledger entries of one account, newest first
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: direction
+          in: query
+          required: false
+          schema: { type: string, enum: [DEBIT, CREDIT] }
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: A page of entries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryPage'
+              example:
+                items:
+                  - id: 0192f5a0-1111-7000-8000-000000000001
+                    account_id: 0192f5a0-5555-7aaa-8bbb-0123456789ab
+                    direction: DEBIT
+                    amount: 1500000
+                    currency: IRR
+                    occurred_at: '2026-10-24T08:00:00Z'
+                  - id: 0192f5a0-1111-7000-8000-000000000002
+                    account_id: 0192f5a0-5555-7aaa-8bbb-0123456789ab
+                    direction: DEBIT
+                    amount: 700000
+                    currency: IRR
+                    occurred_at: '2026-10-24T08:10:00Z'
+                next_cursor: null
+        '404':
+          description: The account does not exist (`NOT_FOUND`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://errors.labbank.example/not-found
+                title: Resource not found
+                status: 404
+                code: NOT_FOUND
+                detail: Account was not found.
+                correlation_id: 7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33
+        '503':
+          description: The ledger is temporarily unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://errors.labbank.example/service-unavailable
+                title: Dependency unavailable
+                status: 503
+                code: SERVICE_UNAVAILABLE
+                detail: The ledger database is unavailable.
+                correlation_id: 7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33
+components:
+  schemas:
+    Entry:
+      type: object
+      required: [id, account_id, direction, amount, occurred_at]
+      properties:
+        id: { type: string, format: uuid }
+        account_id: { type: string, format: uuid }
+        direction: { type: string, enum: [DEBIT, CREDIT] }
+        amount: { type: integer, minimum: 1 }
+        currency: { type: string, enum: [IRR] }
+        occurred_at: { type: string, format: date-time }
+    EntryPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Entry' }
+        next_cursor: { type: [string, 'null'] }
+    Problem:
+      type: object
+      required: [type, title, status, code, detail, correlation_id]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        code: { type: string }
+        detail: { type: string }
+        correlation_id: { type: string }
