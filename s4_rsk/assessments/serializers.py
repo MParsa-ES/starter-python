@@ -14,11 +14,10 @@ class StrictPositiveInt64Field(serializers.IntegerField):
     Custom DRF field enforcing 64 Integer Rules
     """
 
-    class StrictPositiveInt64Field(serializers.IntegerField):
-        def __init__(self, **kwargs):
-            kwargs.setdefault("min_value", 1)
-            kwargs.setdefault("max_value", MAX_INT64)
-            super().__init__(**kwargs)
+    def __init__(self, **kwargs):
+        kwargs.setdefault("min_value", 1)
+        kwargs.setdefault("max_value", MAX_INT64)
+        super().__init__(**kwargs)
 
     def to_internal_value(self, data):
         if isinstance(data, bool) or not isinstance(data, int):
@@ -61,7 +60,7 @@ class RiskAssessmentRequestSerializer(serializers.Serializer):
         allow_null=True,
         default=None,
         validators=[validate_iranian_iban],
-        help_text="Required when `transfer_type` is `EXTERNAL` (IR + 24 ASCII digits with valid ISO 13616 Mod-97 checksum). Must be null or omitted when `transfer_type` is `INTERNAL`.",  # noqa: E501
+        help_text="Required when `transfer_type` is `EXTERNAL` (IR + 24 ASCII digits). Must be null or omitted when `transfer_type` is `INTERNAL`.",  # noqa: E501
     )
     amount = StrictPositiveInt64Field(help_text="Transfer amount in IRR (strictly positive int64 integer).")
     currency = serializers.CharField(

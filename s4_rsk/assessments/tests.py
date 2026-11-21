@@ -1,12 +1,17 @@
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
+from threading import Barrier
 from unittest.mock import patch
 
+import httpx
 import pytest
 from django.contrib.auth.models import Group, User
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, close_old_connections, transaction
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import AccessToken
 
 from assessments.models import (
     DecisionEvent,
@@ -16,6 +21,11 @@ from assessments.models import (
     RiskAssessment,
     TransferType,
 )
+from assessments.services import evaluate_and_persist_assessment
+from common.openapi_contract import assert_response_matches
+from integrations.ledger_client import LedgerClient
+from rules.models import RiskRule
+from rules.services import update_rule
 
 VALID_SOURCE_ACCOUNT_ID = "0192a7d1-0001-7000-8000-00000000a001"
 VALID_DEST_ACCOUNT_ID = "0192a7d1-0002-7000-8000-00000000a002"
@@ -391,3 +401,345 @@ class TestRiskAssessmentIntegration:
                 input_fingerprint="a" * 64,
                 decision=DecisionType.APPROVE,
             )
+
+
+@pytest.mark.django_db
+class TestRiskAssessmentRuleEngine:
+    """
+    Tests for US-01B Core Rule Engine evaluation and snapshot persistence.
+    """
+
+    def test_ignores_disabled_and_future_rules(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        RiskRule.objects.create(
+            name="Disabled low limit",
+            type=RiskRule.Type.AMOUNT_LIMIT,
+            parameters={"max_amount": 100},
+            enabled=False,
+        )
+        RiskRule.objects.create(
+            name="Future low limit",
+            type=RiskRule.Type.AMOUNT_LIMIT,
+            parameters={"max_amount": 100},
+            enabled=True,
+            effective_at=timezone.now() + timedelta(hours=2),
+        )
+
+        response = api_client.post(
+            reverse("risk-assessment-create"), data=valid_internal_payload, format="json"
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["decision"] == DecisionType.APPROVE
+        assert body["reasons"] == [
+            {"code": "NO_RULE_MATCHED", "message": "No blocking rule matched"}
+        ]
+
+    def test_amount_equal_to_max_amount_is_approved_and_above_is_rejected(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        rule = RiskRule.objects.create(
+            name="Max single transfer",
+            type=RiskRule.Type.AMOUNT_LIMIT,
+            parameters={"max_amount": 2_500_000},
+            enabled=True,
+        )
+        url = reverse("risk-assessment-create")
+
+        # Exact boundary: 2,500,000 <= 2,500,000 -> APPROVE
+        ok_resp = api_client.post(url, data=valid_internal_payload, format="json")
+        assert ok_resp.status_code == 201
+        assert ok_resp.json()["decision"] == DecisionType.APPROVE
+
+        # 1 IRR over limit: 2,500,001 > 2,500,000 -> REJECT with rule snapshot
+        over_payload = {
+            **valid_internal_payload,
+            "transaction_id": str(uuid.uuid4()),
+            "amount": 2_500_001,
+        }
+        rej_resp = api_client.post(url, data=over_payload, format="json")
+        assert rej_resp.status_code == 201
+        assert_response_matches(rej_resp, path_template="/risk-assessments", method="post")
+
+        data = rej_resp.json()
+        assert data["decision"] == DecisionType.REJECT
+        assert len(data["reasons"]) == 1
+        reason = data["reasons"][0]
+        assert reason["code"] == "AMOUNT_LIMIT_EXCEEDED"
+        assert reason["rule_id"] == str(rule.id)
+        assert reason["rule_revision"] == 1
+        assert reason["rule_snapshot"]["parameters"] == {"max_amount": 2_500_000}
+
+    def test_multiple_matched_rules_use_highest_severity_and_keep_all_reasons(
+        self, api_client: APIClient, valid_external_payload: dict
+    ):
+        review_rule = RiskRule.objects.create(
+            name="Soft amount threshold",
+            type=RiskRule.Type.AMOUNT_LIMIT,
+            parameters={"max_amount": 1_000_000, "decision": "REVIEW"},
+            enabled=True,
+        )
+        block_rule = RiskRule.objects.create(
+            name="Sanctioned external IBANs",
+            type=RiskRule.Type.BLOCKLIST,
+            parameters={"blocked_ibans": [VALID_DEST_IBAN]},
+            enabled=True,
+        )
+
+        response = api_client.post(
+            reverse("risk-assessment-create"), data=valid_external_payload, format="json"
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["decision"] == DecisionType.REJECT
+        assert [r["code"] for r in data["reasons"]] == [
+            "AMOUNT_LIMIT_EXCEEDED",
+            "BLOCKLIST_MATCH",
+        ]
+        assert {r["rule_id"] for r in data["reasons"]} == {
+            str(review_rule.id),
+            str(block_rule.id),
+        }
+
+        event = DecisionEvent.objects.get(assessment_id=data["decision_id"])
+        assert event.decision == DecisionType.REJECT
+        assert event.reason_code == "BLOCKLIST_MATCH"
+
+    def test_persisted_rule_snapshot_is_immutable_after_rule_update(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        manager = User.objects.create_user(username="rule-editor", password="pw")
+        manager.groups.add(Group.objects.get_or_create(name="manager")[0])
+
+        rule = RiskRule.objects.create(
+            name="Dynamic threshold",
+            type=RiskRule.Type.AMOUNT_LIMIT,
+            parameters={"max_amount": 1_000_000, "decision": "REVIEW"},
+            enabled=True,
+            revision=1,
+        )
+
+        create_resp = api_client.post(
+            reverse("risk-assessment-create"), data=valid_internal_payload, format="json"
+        )
+        decision_id = create_resp.json()["decision_id"]
+
+        # Manager raises threshold to 10,000,000 (revision -> 2)
+        update_rule(
+            actor=manager,
+            rule_id=rule.id,
+            expected_revision=1,
+            changes={"parameters": {"max_amount": 10_000_000, "decision": "REVIEW"}},
+        )
+
+        detail_resp = api_client.get(
+            reverse("risk-assessment-detail", kwargs={"decision_id": decision_id})
+        )
+        assert detail_resp.status_code == 200
+        assert_response_matches(
+            detail_resp, path_template="/risk-assessments/{decision_id}", method="get"
+        )
+        reason = detail_resp.json()["reasons"][0]
+        assert reason["rule_revision"] == 1
+        assert reason["rule_snapshot"]["parameters"]["max_amount"] == 1_000_000
+
+
+@pytest.mark.django_db
+class TestRiskAssessmentIdempotency:
+    """
+    Tests for Idempotency-Key persistence, replay, and 409 conflict handling (GEN-07 / US-01B).
+    """
+
+    def test_replays_original_201_response_for_identical_key_and_payload(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+        key = str(uuid.uuid4())
+
+        first = api_client.post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key)
+        replay = api_client.post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key)
+
+        assert first.status_code == 201
+        assert replay.status_code == 201
+        assert first.json() == replay.json()
+        assert RiskAssessment.objects.count() == 1
+
+    def test_reusing_key_with_different_payload_returns_409_idempotency_key_reused(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+        key = str(uuid.uuid4())
+
+        first = api_client.post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key)
+        assert first.status_code == 201
+
+        modified = {**valid_internal_payload, "amount": valid_internal_payload["amount"] + 1}
+        conflict = api_client.post(url, data=modified, format="json", HTTP_IDEMPOTENCY_KEY=key)
+
+        assert conflict.status_code == 409
+        assert conflict["Content-Type"].startswith("application/problem+json")
+        assert conflict.json()["code"] == "IDEMPOTENCY_KEY_REUSED"
+        assert RiskAssessment.objects.count() == 1
+
+    def test_reusing_key_from_different_service_account_returns_409(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+        key = str(uuid.uuid4())
+        assert (api_client
+                .post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key).status_code == 201)
+
+        other_service = User.objects.create_user(username="s3-pay-backup", password="pw")
+        other_service.groups.add(Group.objects.get_or_create(name="payment_service")[0])
+        other_client = APIClient()
+        other_client.force_authenticate(user=other_service)
+
+        conflict = other_client.post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key)
+        assert conflict.status_code == 409
+        assert conflict.json()["code"] == "IDEMPOTENCY_KEY_REUSED"
+
+    def test_invalid_uuid_header_and_invalid_first_payload_do_not_consume_key(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+
+        bad_header = api_client.post(
+            url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY="not-a-uuid"
+        )
+        assert bad_header.status_code == 400
+
+        key = str(uuid.uuid4())
+        invalid_first = api_client.post(url, data={}, format="json", HTTP_IDEMPOTENCY_KEY=key)
+        assert invalid_first.status_code == 400
+
+        valid_retry = api_client.post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key)
+        assert valid_retry.status_code == 201
+        assert RiskAssessment.objects.count() == 1
+
+    @pytest.mark.django_db(transaction=True)
+    def test_concurrent_identical_requests_create_single_assessment(self, valid_internal_payload: dict):
+        service_user = User.objects.create_user(username="s3-concurrent", password="pw")
+        service_user.groups.add(Group.objects.get_or_create(name="payment_service")[0])
+        token = str(AccessToken.for_user(service_user))
+        url = reverse("risk-assessment-create")
+        key = str(uuid.uuid4())
+        barrier = Barrier(2)
+
+        def submit():
+            close_old_connections()
+            try:
+                client = APIClient()
+                client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+                barrier.wait(timeout=15)
+                resp = client.post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key)
+                return resp.status_code, resp.json()["decision_id"]
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: submit(), range(2)))
+
+        assert results[0] == results[1]
+        assert results[0][0] == 201
+        assert RiskAssessment.objects.count() == 1
+
+
+@pytest.mark.django_db
+class TestRiskAssessmentLedgerIntegration:
+    """
+    Tests verifying S2-LDG ledger history wiring inside evaluate_and_persist_assessment (US-01B).
+    """
+
+    def test_unknown_source_account_in_ledger_forces_review(self, valid_internal_payload: dict):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                404,
+                json={
+                    "type": "https://errors.labbank.example/not-found",
+                    "title": "Resource not found",
+                    "status": 404,
+                    "code": "NOT_FOUND",
+                    "detail": "Account was not found.",
+                    "correlation_id": "cid-404",
+                },
+                headers={"Content-Type": "application/problem+json"},
+            )
+
+        client = LedgerClient("http://s2-ldg.test", transport=httpx.MockTransport(handler))
+        assessment = evaluate_and_persist_assessment(
+            transaction_id=uuid.UUID(valid_internal_payload["transaction_id"]),
+            transfer_type=valid_internal_payload["transfer_type"],
+            source_account_id=uuid.UUID(valid_internal_payload["source_account_id"]),
+            destination_account_id=uuid.UUID(valid_internal_payload["destination_account_id"]),
+            amount=valid_internal_payload["amount"],
+            currency=valid_internal_payload["currency"],
+            occurred_at=timezone.now(),
+            ledger_client=client,
+        )
+
+        assert assessment.decision == DecisionType.REVIEW
+        assert [r.code for r in assessment.reasons.all()] == ["ACCOUNT_NOT_FOUND"]
+
+    def test_ledger_timeout_forces_review_without_failing_assessment(self, valid_internal_payload: dict):
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectTimeout("timeout", request=request)
+
+        client = LedgerClient("http://s2-ldg.test", transport=httpx.MockTransport(handler))
+        assessment = evaluate_and_persist_assessment(
+            transaction_id=uuid.UUID(valid_internal_payload["transaction_id"]),
+            transfer_type=valid_internal_payload["transfer_type"],
+            source_account_id=uuid.UUID(valid_internal_payload["source_account_id"]),
+            destination_account_id=uuid.UUID(valid_internal_payload["destination_account_id"]),
+            amount=valid_internal_payload["amount"],
+            currency=valid_internal_payload["currency"],
+            occurred_at=timezone.now(),
+            ledger_client=client,
+        )
+
+        assert assessment.decision == DecisionType.REVIEW
+        assert [r.code for r in assessment.reasons.all()] == ["LEDGER_UNAVAILABLE"]
+
+    def test_cumulative_daily_debits_trigger_daily_limit_rule(self, valid_internal_payload: dict):
+        RiskRule.objects.create(
+            name="Daily cumulative cap",
+            type=RiskRule.Type.AMOUNT_LIMIT,
+            parameters={"max_amount": 10_000_000, "max_daily_amount": 4_000_000, "decision": "REJECT"},
+            enabled=True,
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "id": "0192f5a0-1111-7000-8000-000000000001",
+                            "account_id": VALID_SOURCE_ACCOUNT_ID,
+                            "direction": "DEBIT",
+                            "amount": 2_000_000,
+                            "currency": "IRR",
+                            "occurred_at": "2026-10-24T06:00:00Z",
+                        }
+                    ],
+                    "next_cursor": None,
+                },
+            )
+
+        client = LedgerClient("http://s2-ldg.test", transport=httpx.MockTransport(handler))
+        assessment = evaluate_and_persist_assessment(
+            transaction_id=uuid.UUID(valid_internal_payload["transaction_id"]),
+            transfer_type=valid_internal_payload["transfer_type"],
+            source_account_id=uuid.UUID(valid_internal_payload["source_account_id"]),
+            destination_account_id=uuid.UUID(valid_internal_payload["destination_account_id"]),
+            amount=2_500_000,
+            currency="IRR",
+            occurred_at=timezone.now(),
+            ledger_client=client,
+        )
+
+        # 2,000,000 prior debits + 2,500,000 current transfer = 4,500,000 > 4,000,000
+        assert assessment.decision == DecisionType.REJECT
+        assert [r.code for r in assessment.reasons.all()] == ["DAILY_AMOUNT_LIMIT_EXCEEDED"]

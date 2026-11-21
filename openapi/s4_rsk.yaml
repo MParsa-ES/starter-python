@@ -104,10 +104,10 @@ paths:
         The same `Idempotency-Key` with the same body replays the original 201 response; the same key
         with a different body is rejected with 409 `IDEMPOTENCY_KEY_REUSED`.
 
-        When `source_account_id` is present, S4-RSK may read the recent debits of that account from
-        S2-LDG (`GET /accounts/{id}/entries`) to detect unusual behavior. If S2-LDG answers 404 or does
-        not answer in time, the decision is `REVIEW` with reason `ACCOUNT_NOT_FOUND` or `LEDGER_UNAVAILABLE`.
-        When it is absent, that history check is skipped.
+        S4-RSK uses `source_account_id` to read recent debits of that account from S2-LDG
+        (`GET /api/v1/accounts/{id}/entries`) to detect unusual behavior. If S2-LDG answers 404 or
+        does not answer in time, the decision is `REVIEW` with reason `ACCOUNT_NOT_FOUND` or
+        `LEDGER_UNAVAILABLE`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/CorrelationId'
@@ -117,14 +117,29 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RiskAssessmentRequest'
-            example:
-              transaction_id: 0192f5a0-7c1e-7d3a-9b2f-3c4d5e6f7a8b
-              amount: 2500000
-              currency: IRR
-              source_iban: IR080540102680020817909002
-              source_account_id: 0192f5a0-5555-7aaa-8bbb-0123456789ab
-              destination_iban: IR640170000000123456789012
-              occurred_at: '2026-10-24T08:30:00Z'
+            examples:
+              internalTransfer:
+                summary: Internal LabBank account-to-account transfer
+                value:
+                  transaction_id: 0192f5a0-7c1e-7d3a-9b2f-3c4d5e6f7a8b
+                  transfer_type: INTERNAL
+                  source_account_id: 0192f5a0-5555-7aaa-8bbb-0123456789ab
+                  destination_account_id: 0192f5a0-6666-7ccc-8ddd-0123456789cd
+                  destination_iban: null
+                  amount: 2500000
+                  currency: IRR
+                  occurred_at: '2026-10-24T08:30:00Z'
+              externalTransfer:
+                summary: External interbank transfer via Iranian IBAN
+                value:
+                  transaction_id: 0192f5a0-7c1e-7d3a-9b2f-3c4d5e6f7a8c
+                  transfer_type: EXTERNAL
+                  source_account_id: 0192f5a0-5555-7aaa-8bbb-0123456789ab
+                  destination_account_id: null
+                  destination_iban: IR760990000000100324200002
+                  amount: 5000000
+                  currency: IRR
+                  occurred_at: '2026-10-24T08:35:00Z'
       responses:
         '201':
           description: Decision created (or replayed for a repeated Idempotency-Key).
@@ -142,9 +157,11 @@ paths:
                 evaluated_at: '2026-10-24T08:30:01Z'
                 reasons:
                   - code: NO_RULE_MATCHED
-                    message: No active rule matched this transaction.
+                    message: No blocking rule matched
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
@@ -155,6 +172,8 @@ paths:
     get:
       tags: [Risk Assessments]
       operationId: getRiskAssessmentById
+      security:
+        - bearerAuth: []
       summary: Read a persisted decision with its transaction context
       parameters:
         - name: decision_id
@@ -182,12 +201,16 @@ paths:
                 evaluated_at: '2026-10-24T08:30:01Z'
                 reasons:
                   - code: NO_RULE_MATCHED
-                    message: No active rule matched this transaction.
+                    message: No blocking rule matched
+                transfer_type: INTERNAL
+                source_account_id: 0192f5a0-5555-7aaa-8bbb-0123456789ab
+                destination_account_id: 0192f5a0-6666-7ccc-8ddd-0123456789cd
+                destination_iban: null
                 amount: 2500000
                 currency: IRR
-                source_iban: IR080540102680020817909002
-                destination_iban: IR640170000000123456789012
                 occurred_at: '2026-10-24T08:30:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -845,6 +868,9 @@ components:
     Decision:
       type: string
       enum: [APPROVE, REVIEW, REJECT]
+    TransferType:
+      type: string
+      enum: [INTERNAL, EXTERNAL]
     Iban:
       type: string
       description: Iranian IBAN, `IR` followed by 24 digits.
@@ -853,12 +879,27 @@ components:
       maxLength: 26
     RiskAssessmentRequest:
       type: object
-      required: [transaction_id, amount, currency, source_iban, destination_iban, occurred_at]
+      required: [transaction_id, transfer_type, source_account_id, amount, currency, occurred_at]
       properties:
         transaction_id:
           type: string
           format: uuid
           description: Transfer identifier generated by S3-PAY.
+        transfer_type:
+          $ref: '#/components/schemas/TransferType'
+        source_account_id:
+          type: string
+          format: uuid
+          description: Ledger account identifier of the sender, shared with S1 and S2.
+        destination_account_id:
+          type: [string, 'null']
+          format: uuid
+          description: Required when `transfer_type` is `INTERNAL` (must differ from `source_account_id`). Must be null or omitted when `transfer_type` is `EXTERNAL`.
+        destination_iban:
+          oneOf:
+            - $ref: '#/components/schemas/Iban'
+            - type: 'null'
+          description: Required when `transfer_type` is `EXTERNAL` (IR + 24 ASCII digits). Must be null or omitted when `transfer_type` is `INTERNAL`.
         amount:
           type: integer
           format: int64
@@ -868,21 +909,36 @@ components:
         currency:
           type: string
           enum: [IRR]
-        source_iban:
-          $ref: '#/components/schemas/Iban'
-        source_account_id:
-          type: string
-          format: uuid
-          description: |
-            Optional. Ledger account identifier of the source IBAN, known to S3-PAY. Lets S4-RSK read the
-            account's recent debits from S2-LDG. When absent the history check is skipped.
-        destination_iban:
-          $ref: '#/components/schemas/Iban'
-          description: Must differ from `source_iban`.
         occurred_at:
           type: string
           format: date-time
           description: When the transfer happened in S3-PAY; explicit timezone required, normalized to UTC.
+      allOf:
+        - if:
+            properties:
+              transfer_type:
+                const: INTERNAL
+            required: [transfer_type]
+          then:
+            required: [destination_account_id]
+            properties:
+              destination_account_id:
+                type: string
+                format: uuid
+              destination_iban:
+                type: 'null'
+        - if:
+            properties:
+              transfer_type:
+                const: EXTERNAL
+            required: [transfer_type]
+          then:
+            required: [destination_iban]
+            properties:
+              destination_iban:
+                $ref: '#/components/schemas/Iban'
+              destination_account_id:
+                type: 'null'
     DecisionReason:
       type: object
       required: [code, message]
@@ -924,18 +980,33 @@ components:
       allOf:
         - $ref: '#/components/schemas/RiskAssessment'
         - type: object
-          required: [amount, currency, source_iban, destination_iban, occurred_at]
+          required:
+            - transfer_type
+            - source_account_id
+            - destination_account_id
+            - destination_iban
+            - amount
+            - currency
+            - occurred_at
           properties:
+            transfer_type:
+              $ref: '#/components/schemas/TransferType'
+            source_account_id:
+              type: string
+              format: uuid
+            destination_account_id:
+              type: [string, 'null']
+              format: uuid
+            destination_iban:
+              oneOf:
+                - $ref: '#/components/schemas/Iban'
+                - type: 'null'
             amount:
               type: integer
               format: int64
             currency:
               type: string
               enum: [IRR]
-            source_iban:
-              $ref: '#/components/schemas/Iban'
-            destination_iban:
-              $ref: '#/components/schemas/Iban'
             occurred_at:
               type: string
               format: date-time
