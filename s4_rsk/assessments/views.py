@@ -1,10 +1,17 @@
+import hashlib
+import json
+import uuid
+
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db import transaction
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from assessments.models import AssessmentCreateRequest
 from assessments.selectors import get_assessment_by_decision_id
 from assessments.serializers import (
     RiskAssessmentDetailResponseSerializer,
@@ -12,6 +19,7 @@ from assessments.serializers import (
     RiskAssessmentResponseSerializer,
 )
 from assessments.services import evaluate_and_persist_assessment
+from common.exceptions import LabBankAPIException
 from common.permissions import IsPaymentService
 from common.serializers import ProblemSerializer
 
@@ -19,7 +27,7 @@ from common.serializers import ProblemSerializer
 class RiskAssessmentCreateAPIView(APIView):
     """
     POST /api/v1/risk-assessments
-    Evaluates a payment transaction and persists the initial risk decision (US-01A).
+    Evaluates a payment transaction and persists the initial risk decision (US-01A / US-01B).
     """
 
     permission_classes = (IsAuthenticated, IsPaymentService)
@@ -52,13 +60,48 @@ class RiskAssessmentCreateAPIView(APIView):
         tags=["Risk Assessments"],
     )
     def post(self, request: Request) -> Response:
-        input_serializer = RiskAssessmentRequestSerializer(data=request.data)
-        input_serializer.is_valid(raise_exception=True)
+        raw_key = request.headers.get("Idempotency-Key")
+        idempotency_key: uuid.UUID | None = None
+        if raw_key is not None:
+            try:
+                idempotency_key = uuid.UUID(raw_key)
+            except (ValueError, AttributeError) as exc:
+                raise serializers.ValidationError({"Idempotency-Key": "Must be a UUID."}) from exc
 
-        assessment = evaluate_and_persist_assessment(**input_serializer.validated_data)
+        fingerprint = hashlib.sha256(
+            json.dumps(request.data, sort_keys=True, separators=(",", ":"), cls=DjangoJSONEncoder).encode("utf-8")
+        ).hexdigest()
 
-        output_serializer = RiskAssessmentResponseSerializer(assessment)
-        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+        with transaction.atomic():
+            record: AssessmentCreateRequest | None = None
+            if idempotency_key is not None:
+                record, created = AssessmentCreateRequest.objects.get_or_create(
+                    key=idempotency_key,
+                    defaults={"actor": request.user, "fingerprint": fingerprint},
+                )
+                if not created:
+                    record = AssessmentCreateRequest.objects.select_for_update().get(pk=record.pk)
+                    if record.actor_id != request.user.pk or record.fingerprint != fingerprint:
+                        raise LabBankAPIException(
+                            code="IDEMPOTENCY_KEY_REUSED",
+                            title="Conflict",
+                            detail="Idempotency key already used with a different request payload or caller.",
+                            status_code=status.HTTP_409_CONFLICT,
+                            type_slug="conflict",
+                        )
+                    return Response(record.response, status=status.HTTP_201_CREATED)
+
+            input_serializer = RiskAssessmentRequestSerializer(data=request.data)
+            input_serializer.is_valid(raise_exception=True)
+
+            assessment = evaluate_and_persist_assessment(**input_serializer.validated_data)
+
+            data = dict(RiskAssessmentResponseSerializer(assessment).data)
+            if record is not None:
+                record.response = data
+                record.save(update_fields=["response"])
+
+            return Response(data, status=status.HTTP_201_CREATED)
 
 
 class RiskAssessmentDetailAPIView(APIView):

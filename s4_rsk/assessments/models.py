@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from uuid6 import uuid7
 
@@ -250,3 +251,20 @@ class DecisionEvent(models.Model):
 
     def __str__(self):
         return f"Event {self.event_id} {self.event_type} -> {self.decision}"
+
+class AssessmentCreateRequest(models.Model):
+    """
+    Persists a successful assessment response for safe POST retries (GEN-07).
+    """
+
+    key = models.UUIDField(unique=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    fingerprint = models.CharField(max_length=64)
+    response = models.JSONField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "rsk_assessment_create_requests"
+
+    def __str__(self):
+        return f"AssessmentIdempotency({self.key})"

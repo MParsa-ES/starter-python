@@ -1,13 +1,16 @@
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from threading import Barrier
 from unittest.mock import patch
 
 import pytest
 from django.contrib.auth.models import Group, User
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, close_old_connections, transaction
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import AccessToken
 
 from assessments.models import (
     DecisionEvent,
@@ -539,3 +542,103 @@ class TestRiskAssessmentRuleEngine:
         reason = detail_resp.json()["reasons"][0]
         assert reason["rule_revision"] == 1
         assert reason["rule_snapshot"]["parameters"]["max_amount"] == 1_000_000
+
+
+@pytest.mark.django_db
+class TestRiskAssessmentIdempotency:
+    """
+    Tests for Idempotency-Key persistence, replay, and 409 conflict handling (GEN-07 / US-01B).
+    """
+
+    def test_replays_original_201_response_for_identical_key_and_payload(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+        key = str(uuid.uuid4())
+
+        first = api_client.post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key)
+        replay = api_client.post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key)
+
+        assert first.status_code == 201
+        assert replay.status_code == 201
+        assert first.json() == replay.json()
+        assert RiskAssessment.objects.count() == 1
+
+    def test_reusing_key_with_different_payload_returns_409_idempotency_key_reused(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+        key = str(uuid.uuid4())
+
+        first = api_client.post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key)
+        assert first.status_code == 201
+
+        modified = {**valid_internal_payload, "amount": valid_internal_payload["amount"] + 1}
+        conflict = api_client.post(url, data=modified, format="json", HTTP_IDEMPOTENCY_KEY=key)
+
+        assert conflict.status_code == 409
+        assert conflict["Content-Type"].startswith("application/problem+json")
+        assert conflict.json()["code"] == "IDEMPOTENCY_KEY_REUSED"
+        assert RiskAssessment.objects.count() == 1
+
+    def test_reusing_key_from_different_service_account_returns_409(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+        key = str(uuid.uuid4())
+        assert (api_client
+                .post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key).status_code == 201)
+
+        other_service = User.objects.create_user(username="s3-pay-backup", password="pw")
+        other_service.groups.add(Group.objects.get_or_create(name="payment_service")[0])
+        other_client = APIClient()
+        other_client.force_authenticate(user=other_service)
+
+        conflict = other_client.post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key)
+        assert conflict.status_code == 409
+        assert conflict.json()["code"] == "IDEMPOTENCY_KEY_REUSED"
+
+    def test_invalid_uuid_header_and_invalid_first_payload_do_not_consume_key(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        url = reverse("risk-assessment-create")
+
+        bad_header = api_client.post(
+            url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY="not-a-uuid"
+        )
+        assert bad_header.status_code == 400
+
+        key = str(uuid.uuid4())
+        invalid_first = api_client.post(url, data={}, format="json", HTTP_IDEMPOTENCY_KEY=key)
+        assert invalid_first.status_code == 400
+
+        valid_retry = api_client.post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key)
+        assert valid_retry.status_code == 201
+        assert RiskAssessment.objects.count() == 1
+
+    @pytest.mark.django_db(transaction=True)
+    def test_concurrent_identical_requests_create_single_assessment(self, valid_internal_payload: dict):
+        service_user = User.objects.create_user(username="s3-concurrent", password="pw")
+        service_user.groups.add(Group.objects.get_or_create(name="payment_service")[0])
+        token = str(AccessToken.for_user(service_user))
+        url = reverse("risk-assessment-create")
+        key = str(uuid.uuid4())
+        barrier = Barrier(2)
+
+        def submit():
+            close_old_connections()
+            try:
+                client = APIClient()
+                client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+                barrier.wait(timeout=15)
+                resp = client.post(url, data=valid_internal_payload, format="json", HTTP_IDEMPOTENCY_KEY=key)
+                return resp.status_code, resp.json()["decision_id"]
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: submit(), range(2)))
+
+        assert results[0] == results[1]
+        assert results[0][0] == 201
+        assert RiskAssessment.objects.count() == 1
