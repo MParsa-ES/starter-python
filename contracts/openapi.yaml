@@ -73,7 +73,7 @@ paths:
       operationId: createRiskAssessment
       description: |-
         POST /api/v1/risk-assessments
-        Evaluates a payment transaction and persists the initial risk decision (US-01A).
+        Evaluates a payment transaction and persists the initial risk decision (US-01A / US-01B).
       summary: Evaluate transaction risk and persist decision
       parameters:
       - in: header
@@ -329,6 +329,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
           description: ''
+  /api/v1/risk-statistics:
+    get:
+      operationId: get_risk_statistics
+      description: GET /api/v1/risk-statistics?start=...&end=... (US-03A).
+      parameters:
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date-time
+        description: Range end, exclusive. ISO 8601 in UTC, e.g. 2026-10-25T00:00:00Z
+        required: true
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date-time
+        description: Range start, inclusive. ISO 8601 in UTC, e.g. 2026-10-24T00:00:00Z
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsResponse'
+          description: ''
   /health:
     get:
       operationId: health_retrieve
@@ -398,6 +429,19 @@ components:
       - CONNECTED
       type: string
       description: '* `CONNECTED` - CONNECTED'
+    DecisionCounts:
+      type: object
+      properties:
+        APPROVE:
+          type: integer
+        REVIEW:
+          type: integer
+        REJECT:
+          type: integer
+      required:
+      - APPROVE
+      - REJECT
+      - REVIEW
     DecisionEnum:
       enum:
       - APPROVE
@@ -627,12 +671,14 @@ components:
           - string
           - 'null'
           description: Required when `transfer_type` is `EXTERNAL` (IR + 24 ASCII
-            digits with valid ISO 13616 Mod-97 checksum). Must be null or omitted
-            when `transfer_type` is `INTERNAL`.
+            digits). Must be null or omitted when `transfer_type` is `INTERNAL`.
           maxLength: 26
           minLength: 26
         amount:
           type: integer
+          maximum: 9223372036854775807
+          minimum: 1
+          format: int64
           description: Transfer amount in IRR (strictly positive int64 integer).
         currency:
           type: string
@@ -766,6 +812,28 @@ components:
       - before
       - changed_at
       - revision
+    StatisticsResponse:
+      type: object
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        decisions:
+          allOf:
+          - $ref: '#/components/schemas/DecisionCounts'
+          description: Initial assessment decisions with start <= evaluated_at < end.
+        queue_size_now:
+          type: integer
+          description: Open manual-review items right now. A snapshot, NOT a count
+            for the range.
+      required:
+      - decisions
+      - end
+      - queue_size_now
+      - start
     TokenBlacklist:
       type: object
       properties:

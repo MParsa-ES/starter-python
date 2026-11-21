@@ -1,9 +1,18 @@
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _isolate_neighbor_urls(monkeypatch):
+    """Prevent local .env neighbor URLs from triggering live HTTP calls during tests."""
+    monkeypatch.delenv("NEIGHBOR_BASE_URL", raising=False)
+    monkeypatch.delenv("S2_LDG_BASE_URL", raising=False)
+
+
 def pytest_addoption(parser):
     parser.addoption(
-        "--run-neighbor-contract", action="store_true", default=False,
+        "--run-neighbor-contract",
+        action="store_true",
+        default=False,
         help="Run contract tests against the explicitly configured neighbour or stub.",
     )
 

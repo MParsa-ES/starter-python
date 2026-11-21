@@ -1,7 +1,10 @@
 import hashlib
 import json
+import os
+from datetime import UTC
 from uuid import UUID
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -18,6 +21,7 @@ from assessments.models import (
     RiskAssessment,
 )
 from common.middleware import get_correlation_id
+from integrations.ledger_client import LedgerClient, LedgerHistory, assess_ledger_history
 from rules.selectors import list_active_rules
 
 __all__ = [
@@ -26,6 +30,14 @@ __all__ = [
     "compute_input_fingerprint",
     "evaluate_and_persist_assessment",
 ]
+
+
+def _build_ledger_client() -> LedgerClient | None:
+    base_url = os.environ.get("NEIGHBOR_BASE_URL") or os.environ.get("S2_LDG_BASE_URL")
+    if not base_url:
+        return None
+    token = os.environ.get("S2_LDG_TOKEN") or None
+    return LedgerClient(base_url=base_url, token=token)
 
 
 def compute_input_fingerprint(payload: dict) -> str:
@@ -61,11 +73,12 @@ def evaluate_and_persist_assessment(
     amount: int,
     currency: str,
     occurred_at,
+    ledger_client: LedgerClient | None = None,
 ) -> RiskAssessment:
     """
-    US-01B Core Rule Engine Evaluation:
-    Evaluates the transfer against active RiskRules and atomically persists
-    RiskAssessment, all DecisionReasons, and the initial DecisionEvent.
+    US-01B Risk Assessment Service:
+    Queries S2-LDG debit history (when configured), evaluates active RiskRules,
+    and atomically persists RiskAssessment, DecisionReasons, and DecisionEvent.
     """
     payload = {
         "transaction_id": transaction_id,
@@ -81,6 +94,19 @@ def evaluate_and_persist_assessment(
     correlation_id = get_correlation_id() or ""
     evaluated_at = timezone.now()
 
+    client = ledger_client if ledger_client is not None else _build_ledger_client()
+    ledger_history: LedgerHistory | None = None
+    if client is not None:
+        tehran_now = evaluated_at.astimezone(settings.BUSINESS_TIMEZONE)
+        tehran_day_start = tehran_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        since_utc = tehran_day_start.astimezone(UTC)
+        ledger_history = assess_ledger_history(
+            client,
+            source_account_id,
+            since_utc,
+            correlation_id=correlation_id,
+        )
+
     ctx = EvaluationContext(
         transaction_id=transaction_id,
         transfer_type=transfer_type,
@@ -89,6 +115,7 @@ def evaluate_and_persist_assessment(
         destination_iban=destination_iban,
         amount=amount,
         currency=currency,
+        ledger_history=ledger_history,
     )
     active_rules = list_active_rules(as_of=evaluated_at)
     result = evaluate_rules(ctx, active_rules)

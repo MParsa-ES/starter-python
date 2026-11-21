@@ -4,6 +4,7 @@ from datetime import timedelta
 from threading import Barrier
 from unittest.mock import patch
 
+import httpx
 import pytest
 from django.contrib.auth.models import Group, User
 from django.db import IntegrityError, close_old_connections, transaction
@@ -20,7 +21,9 @@ from assessments.models import (
     RiskAssessment,
     TransferType,
 )
+from assessments.services import evaluate_and_persist_assessment
 from common.openapi_contract import assert_response_matches
+from integrations.ledger_client import LedgerClient
 from rules.models import RiskRule
 from rules.services import update_rule
 
@@ -642,3 +645,101 @@ class TestRiskAssessmentIdempotency:
         assert results[0] == results[1]
         assert results[0][0] == 201
         assert RiskAssessment.objects.count() == 1
+
+
+@pytest.mark.django_db
+class TestRiskAssessmentLedgerIntegration:
+    """
+    Tests verifying S2-LDG ledger history wiring inside evaluate_and_persist_assessment (US-01B).
+    """
+
+    def test_unknown_source_account_in_ledger_forces_review(self, valid_internal_payload: dict):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                404,
+                json={
+                    "type": "https://errors.labbank.example/not-found",
+                    "title": "Resource not found",
+                    "status": 404,
+                    "code": "NOT_FOUND",
+                    "detail": "Account was not found.",
+                    "correlation_id": "cid-404",
+                },
+                headers={"Content-Type": "application/problem+json"},
+            )
+
+        client = LedgerClient("http://s2-ldg.test", transport=httpx.MockTransport(handler))
+        assessment = evaluate_and_persist_assessment(
+            transaction_id=uuid.UUID(valid_internal_payload["transaction_id"]),
+            transfer_type=valid_internal_payload["transfer_type"],
+            source_account_id=uuid.UUID(valid_internal_payload["source_account_id"]),
+            destination_account_id=uuid.UUID(valid_internal_payload["destination_account_id"]),
+            amount=valid_internal_payload["amount"],
+            currency=valid_internal_payload["currency"],
+            occurred_at=timezone.now(),
+            ledger_client=client,
+        )
+
+        assert assessment.decision == DecisionType.REVIEW
+        assert [r.code for r in assessment.reasons.all()] == ["ACCOUNT_NOT_FOUND"]
+
+    def test_ledger_timeout_forces_review_without_failing_assessment(self, valid_internal_payload: dict):
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectTimeout("timeout", request=request)
+
+        client = LedgerClient("http://s2-ldg.test", transport=httpx.MockTransport(handler))
+        assessment = evaluate_and_persist_assessment(
+            transaction_id=uuid.UUID(valid_internal_payload["transaction_id"]),
+            transfer_type=valid_internal_payload["transfer_type"],
+            source_account_id=uuid.UUID(valid_internal_payload["source_account_id"]),
+            destination_account_id=uuid.UUID(valid_internal_payload["destination_account_id"]),
+            amount=valid_internal_payload["amount"],
+            currency=valid_internal_payload["currency"],
+            occurred_at=timezone.now(),
+            ledger_client=client,
+        )
+
+        assert assessment.decision == DecisionType.REVIEW
+        assert [r.code for r in assessment.reasons.all()] == ["LEDGER_UNAVAILABLE"]
+
+    def test_cumulative_daily_debits_trigger_daily_limit_rule(self, valid_internal_payload: dict):
+        RiskRule.objects.create(
+            name="Daily cumulative cap",
+            type=RiskRule.Type.AMOUNT_LIMIT,
+            parameters={"max_amount": 10_000_000, "max_daily_amount": 4_000_000, "decision": "REJECT"},
+            enabled=True,
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "id": "0192f5a0-1111-7000-8000-000000000001",
+                            "account_id": VALID_SOURCE_ACCOUNT_ID,
+                            "direction": "DEBIT",
+                            "amount": 2_000_000,
+                            "currency": "IRR",
+                            "occurred_at": "2026-10-24T06:00:00Z",
+                        }
+                    ],
+                    "next_cursor": None,
+                },
+            )
+
+        client = LedgerClient("http://s2-ldg.test", transport=httpx.MockTransport(handler))
+        assessment = evaluate_and_persist_assessment(
+            transaction_id=uuid.UUID(valid_internal_payload["transaction_id"]),
+            transfer_type=valid_internal_payload["transfer_type"],
+            source_account_id=uuid.UUID(valid_internal_payload["source_account_id"]),
+            destination_account_id=uuid.UUID(valid_internal_payload["destination_account_id"]),
+            amount=2_500_000,
+            currency="IRR",
+            occurred_at=timezone.now(),
+            ledger_client=client,
+        )
+
+        # 2,000,000 prior debits + 2,500,000 current transfer = 4,500,000 > 4,000,000
+        assert assessment.decision == DecisionType.REJECT
+        assert [r.code for r in assessment.reasons.all()] == ["DAILY_AMOUNT_LIMIT_EXCEEDED"]

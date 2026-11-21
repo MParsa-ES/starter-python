@@ -5,6 +5,11 @@ from uuid import UUID
 from django.apps import apps
 
 from assessments.models import DecisionType, TransferType
+from integrations.ledger_client import (
+    STATUS_ACCOUNT_NOT_FOUND,
+    STATUS_OK,
+    LedgerHistory,
+)
 from rules.models import RiskRule
 
 DEFAULT_APPROVE_CODE = "NO_RULE_MATCHED"
@@ -19,7 +24,7 @@ DECISION_SEVERITY: dict[str, int] = {
 
 @dataclass(frozen=True)
 class EvaluationContext:
-    """Immutable transaction inputs passed into the rule engine."""
+    """Immutable transaction and ledger inputs passed into the rule engine."""
 
     transaction_id: UUID
     transfer_type: str
@@ -28,6 +33,7 @@ class EvaluationContext:
     destination_iban: str | None
     amount: int
     currency: str
+    ledger_history: LedgerHistory | None = None
 
     @property
     def destination_target(self) -> str:
@@ -79,22 +85,65 @@ def _resolve_rule_decision(parameters: dict, *, default: str = DecisionType.REJE
     return default
 
 
-def _evaluate_amount_limit(ctx: EvaluationContext, rule: RiskRule) -> RuleMatch | None:
-    max_amount = rule.parameters.get("max_amount")
-    if isinstance(max_amount, bool) or not isinstance(max_amount, int):
-        return None
-    if ctx.amount <= max_amount:
-        return None
+def _evaluate_amount_limit(ctx: EvaluationContext, rule: RiskRule) -> list[RuleMatch]:
+    matches: list[RuleMatch] = []
+    params = rule.parameters or {}
+    decision = _resolve_rule_decision(params, default=DecisionType.REJECT)
+    snapshot = build_rule_snapshot(rule)
 
-    decision = _resolve_rule_decision(rule.parameters, default=DecisionType.REJECT)
-    return RuleMatch(
-        code="AMOUNT_LIMIT_EXCEEDED",
-        message=f"Transaction amount {ctx.amount} IRR exceeds limit of {max_amount} IRR ({rule.name}).",
-        decision=decision,
-        rule_id=rule.id,
-        rule_revision=rule.revision,
-        rule_snapshot=build_rule_snapshot(rule),
-    )
+    max_amount = params.get("max_amount")
+    if not isinstance(max_amount, bool) and isinstance(max_amount, int) and ctx.amount > max_amount:
+        matches.append(
+            RuleMatch(
+                code="AMOUNT_LIMIT_EXCEEDED",
+                message=f"Transaction amount {ctx.amount} IRR exceeds limit of {max_amount} IRR ({rule.name}).",
+                decision=decision,
+                rule_id=rule.id,
+                rule_revision=rule.revision,
+                rule_snapshot=snapshot,
+            )
+        )
+
+    if ctx.ledger_history is not None and ctx.ledger_history.status == STATUS_OK:
+        prior_entries = ctx.ledger_history.entries
+
+        max_daily_amount = params.get("max_daily_amount")
+        if not isinstance(max_daily_amount, bool) and isinstance(max_daily_amount, int):
+            cumulative_amount = sum(entry.amount for entry in prior_entries) + ctx.amount
+            if cumulative_amount > max_daily_amount:
+                matches.append(
+                    RuleMatch(
+                        code="DAILY_AMOUNT_LIMIT_EXCEEDED",
+                        message=(
+                            f"Cumulative daily debit {cumulative_amount} IRR exceeds daily limit "
+                            f"of {max_daily_amount} IRR ({rule.name})."
+                        ),
+                        decision=decision,
+                        rule_id=rule.id,
+                        rule_revision=rule.revision,
+                        rule_snapshot=snapshot,
+                    )
+                )
+
+        max_daily_count = params.get("max_daily_count")
+        if not isinstance(max_daily_count, bool) and isinstance(max_daily_count, int):
+            cumulative_count = len(prior_entries) + 1
+            if cumulative_count > max_daily_count:
+                matches.append(
+                    RuleMatch(
+                        code="DAILY_VELOCITY_LIMIT_EXCEEDED",
+                        message=(
+                            f"Daily debit count {cumulative_count} exceeds daily limit "
+                            f"of {max_daily_count} transfers ({rule.name})."
+                        ),
+                        decision=decision,
+                        rule_id=rule.id,
+                        rule_revision=rule.revision,
+                        rule_snapshot=snapshot,
+                    )
+                )
+
+    return matches
 
 
 def _is_blocked_in_registry(targets: set[str]) -> bool:
@@ -108,7 +157,7 @@ def _is_blocked_in_registry(targets: set[str]) -> bool:
     return False
 
 
-def _evaluate_blocklist(ctx: EvaluationContext, rule: RiskRule) -> RuleMatch | None:
+def _evaluate_blocklist(ctx: EvaluationContext, rule: RiskRule) -> list[RuleMatch]:
     targets = {str(ctx.source_account_id)}
     if ctx.destination_target:
         targets.add(ctx.destination_target)
@@ -122,17 +171,19 @@ def _evaluate_blocklist(ctx: EvaluationContext, rule: RiskRule) -> RuleMatch | N
 
     matched = bool(targets & inline_blocked) or _is_blocked_in_registry(targets)
     if not matched:
-        return None
+        return []
 
     decision = _resolve_rule_decision(params, default=DecisionType.REJECT)
-    return RuleMatch(
-        code="BLOCKLIST_MATCH",
-        message=f"Transaction matched blocklist rule '{rule.name}'.",
-        decision=decision,
-        rule_id=rule.id,
-        rule_revision=rule.revision,
-        rule_snapshot=build_rule_snapshot(rule),
-    )
+    return [
+        RuleMatch(
+            code="BLOCKLIST_MATCH",
+            message=f"Transaction matched blocklist rule '{rule.name}'.",
+            decision=decision,
+            rule_id=rule.id,
+            rule_revision=rule.revision,
+            rule_snapshot=build_rule_snapshot(rule),
+        )
+    ]
 
 
 _EVALUATORS = {
@@ -142,16 +193,29 @@ _EVALUATORS = {
 
 
 def evaluate_rules(ctx: EvaluationContext, rules: Iterable[RiskRule]) -> EvaluationResult:
-    """Evaluate all active rules against `ctx` and aggregate decision by severity."""
+    """Evaluate ledger signals and all active rules against `ctx`, aggregating by severity."""
     matches: list[RuleMatch] = []
+
+    if ctx.ledger_history is not None and ctx.ledger_history.forced_decision:
+        reason_code = ctx.ledger_history.reason_code or "LEDGER_UNAVAILABLE"
+        reason_message = (
+            "Source account was not found in S2-LDG ledger."
+            if reason_code == STATUS_ACCOUNT_NOT_FOUND
+            else "S2-LDG ledger service is unavailable or returned an invalid response."
+        )
+        matches.append(
+            RuleMatch(
+                code=reason_code,
+                message=reason_message,
+                decision=ctx.ledger_history.forced_decision,
+            )
+        )
 
     for rule in rules:
         evaluator = _EVALUATORS.get(rule.type)
         if evaluator is None:
             continue
-        match = evaluator(ctx, rule)
-        if match is not None:
-            matches.append(match)
+        matches.extend(evaluator(ctx, rule))
 
     if not matches:
         default_reason = RuleMatch(
