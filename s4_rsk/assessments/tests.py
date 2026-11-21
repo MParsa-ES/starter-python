@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
@@ -16,6 +17,9 @@ from assessments.models import (
     RiskAssessment,
     TransferType,
 )
+from common.openapi_contract import assert_response_matches
+from rules.models import RiskRule
+from rules.services import update_rule
 
 VALID_SOURCE_ACCOUNT_ID = "0192a7d1-0001-7000-8000-00000000a001"
 VALID_DEST_ACCOUNT_ID = "0192a7d1-0002-7000-8000-00000000a002"
@@ -391,3 +395,147 @@ class TestRiskAssessmentIntegration:
                 input_fingerprint="a" * 64,
                 decision=DecisionType.APPROVE,
             )
+
+
+@pytest.mark.django_db
+class TestRiskAssessmentRuleEngine:
+    """
+    Tests for US-01B Core Rule Engine evaluation and snapshot persistence.
+    """
+
+    def test_ignores_disabled_and_future_rules(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        RiskRule.objects.create(
+            name="Disabled low limit",
+            type=RiskRule.Type.AMOUNT_LIMIT,
+            parameters={"max_amount": 100},
+            enabled=False,
+        )
+        RiskRule.objects.create(
+            name="Future low limit",
+            type=RiskRule.Type.AMOUNT_LIMIT,
+            parameters={"max_amount": 100},
+            enabled=True,
+            effective_at=timezone.now() + timedelta(hours=2),
+        )
+
+        response = api_client.post(
+            reverse("risk-assessment-create"), data=valid_internal_payload, format="json"
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["decision"] == DecisionType.APPROVE
+        assert body["reasons"] == [
+            {"code": "NO_RULE_MATCHED", "message": "No blocking rule matched"}
+        ]
+
+    def test_amount_equal_to_max_amount_is_approved_and_above_is_rejected(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        rule = RiskRule.objects.create(
+            name="Max single transfer",
+            type=RiskRule.Type.AMOUNT_LIMIT,
+            parameters={"max_amount": 2_500_000},
+            enabled=True,
+        )
+        url = reverse("risk-assessment-create")
+
+        # Exact boundary: 2,500,000 <= 2,500,000 -> APPROVE
+        ok_resp = api_client.post(url, data=valid_internal_payload, format="json")
+        assert ok_resp.status_code == 201
+        assert ok_resp.json()["decision"] == DecisionType.APPROVE
+
+        # 1 IRR over limit: 2,500,001 > 2,500,000 -> REJECT with rule snapshot
+        over_payload = {
+            **valid_internal_payload,
+            "transaction_id": str(uuid.uuid4()),
+            "amount": 2_500_001,
+        }
+        rej_resp = api_client.post(url, data=over_payload, format="json")
+        assert rej_resp.status_code == 201
+        assert_response_matches(rej_resp, path_template="/risk-assessments", method="post")
+
+        data = rej_resp.json()
+        assert data["decision"] == DecisionType.REJECT
+        assert len(data["reasons"]) == 1
+        reason = data["reasons"][0]
+        assert reason["code"] == "AMOUNT_LIMIT_EXCEEDED"
+        assert reason["rule_id"] == str(rule.id)
+        assert reason["rule_revision"] == 1
+        assert reason["rule_snapshot"]["parameters"] == {"max_amount": 2_500_000}
+
+    def test_multiple_matched_rules_use_highest_severity_and_keep_all_reasons(
+        self, api_client: APIClient, valid_external_payload: dict
+    ):
+        review_rule = RiskRule.objects.create(
+            name="Soft amount threshold",
+            type=RiskRule.Type.AMOUNT_LIMIT,
+            parameters={"max_amount": 1_000_000, "decision": "REVIEW"},
+            enabled=True,
+        )
+        block_rule = RiskRule.objects.create(
+            name="Sanctioned external IBANs",
+            type=RiskRule.Type.BLOCKLIST,
+            parameters={"blocked_ibans": [VALID_DEST_IBAN]},
+            enabled=True,
+        )
+
+        response = api_client.post(
+            reverse("risk-assessment-create"), data=valid_external_payload, format="json"
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["decision"] == DecisionType.REJECT
+        assert [r["code"] for r in data["reasons"]] == [
+            "AMOUNT_LIMIT_EXCEEDED",
+            "BLOCKLIST_MATCH",
+        ]
+        assert {r["rule_id"] for r in data["reasons"]} == {
+            str(review_rule.id),
+            str(block_rule.id),
+        }
+
+        event = DecisionEvent.objects.get(assessment_id=data["decision_id"])
+        assert event.decision == DecisionType.REJECT
+        assert event.reason_code == "BLOCKLIST_MATCH"
+
+    def test_persisted_rule_snapshot_is_immutable_after_rule_update(
+        self, api_client: APIClient, valid_internal_payload: dict
+    ):
+        manager = User.objects.create_user(username="rule-editor", password="pw")
+        manager.groups.add(Group.objects.get_or_create(name="manager")[0])
+
+        rule = RiskRule.objects.create(
+            name="Dynamic threshold",
+            type=RiskRule.Type.AMOUNT_LIMIT,
+            parameters={"max_amount": 1_000_000, "decision": "REVIEW"},
+            enabled=True,
+            revision=1,
+        )
+
+        create_resp = api_client.post(
+            reverse("risk-assessment-create"), data=valid_internal_payload, format="json"
+        )
+        decision_id = create_resp.json()["decision_id"]
+
+        # Manager raises threshold to 10,000,000 (revision -> 2)
+        update_rule(
+            actor=manager,
+            rule_id=rule.id,
+            expected_revision=1,
+            changes={"parameters": {"max_amount": 10_000_000, "decision": "REVIEW"}},
+        )
+
+        detail_resp = api_client.get(
+            reverse("risk-assessment-detail", kwargs={"decision_id": decision_id})
+        )
+        assert detail_resp.status_code == 200
+        assert_response_matches(
+            detail_resp, path_template="/risk-assessments/{decision_id}", method="get"
+        )
+        reason = detail_resp.json()["reasons"][0]
+        assert reason["rule_revision"] == 1
+        assert reason["rule_snapshot"]["parameters"]["max_amount"] == 1_000_000
