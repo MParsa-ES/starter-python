@@ -3,6 +3,7 @@ import "./App.css";
 import { ProblemDetails } from "./ProblemDetails";
 import { readProblem, type ProblemDetailsBody } from "./problem";
 import { RulesPage } from "./RulesPage";
+import { ExplanationsPage } from "./ExplanationsPage";
 
 // آدرس بک‌اند از متغیر محیطی Vite خوانده می‌شود (فایل .env.local)؛ در کد ثابت نیست.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8084";
@@ -101,6 +102,7 @@ export default function App() {
   }
   if (path === "/health") return <HealthPage />;
   if (path === "/rules") return <RulesPage />;
+  if (path === "/explanations") return <ExplanationsPage />;
   return (
     <main className="card" dir="rtl">
       <h1>۴۰۴</h1>

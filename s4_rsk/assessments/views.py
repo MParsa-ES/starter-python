@@ -4,23 +4,27 @@ import uuid
 
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from rest_framework import serializers, status
+from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from assessments.models import AssessmentCreateRequest
+from assessments.models import AssessmentCreateRequest, DecisionReason, RiskAssessment
 from assessments.selectors import get_assessment_by_decision_id
 from assessments.serializers import (
+    DecisionExplanationSerializer,
     RiskAssessmentDetailResponseSerializer,
     RiskAssessmentRequestSerializer,
     RiskAssessmentResponseSerializer,
 )
 from assessments.services import evaluate_and_persist_assessment
 from common.exceptions import LabBankAPIException
-from common.permissions import IsPaymentService
+from common.pagination import LabBankCursorPagination
+from common.permissions import CanReadDecisionHistory, IsPaymentService
 from common.serializers import ProblemSerializer
 
 
@@ -125,3 +129,29 @@ class RiskAssessmentDetailAPIView(APIView):
         assessment = get_assessment_by_decision_id(decision_id=decision_id)
         output_serializer = RiskAssessmentDetailResponseSerializer(assessment)
         return Response(output_serializer.data, status=status.HTTP_200_OK)
+
+
+class ExplanationPagination(LabBankCursorPagination):
+    ordering = ("created_at", "id")
+
+
+class DecisionExplanationView(ListAPIView):
+    permission_classes = (IsAuthenticated, CanReadDecisionHistory)
+    serializer_class = DecisionExplanationSerializer
+    pagination_class = ExplanationPagination
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return DecisionReason.objects.none()
+        assessment = get_object_or_404(RiskAssessment, pk=self.kwargs["decision_id"])
+        return assessment.reasons.all().order_by("created_at", "id")
+
+    @extend_schema(
+        operation_id="listDecisionExplanations",
+        summary="List the recorded reasons for an assessment",
+        responses={200: DecisionExplanationSerializer(many=True), 401: ProblemSerializer,
+                   403: ProblemSerializer, 404: ProblemSerializer},
+        tags=["Risk Assessments"],
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)

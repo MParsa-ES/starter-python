@@ -105,7 +105,7 @@ export function RulesPage() {
 
   return <main className="card rules-card" dir="rtl">
     <h1>مدیریت قوانین ریسک</h1><p className="sub">ساخت، ویرایش و مشاهدهٔ سابقهٔ قوانین</p>
-    <p><a href="/health">وضعیت سرویس</a></p>
+    <p><a href="/health">وضعیت سرویس</a> · <a href="/explanations">دلایل تصمیم</a></p>
     <label>توکن مدیر <input type="password" value={token} onChange={event => { setToken(event.target.value); setRules([]); setCursor(null); setHistory([]); setHistoryRule(null); pendingCreate.current = null; reset(); }} autoComplete="off" /></label>
     <button type="button" disabled={!token} onClick={() => void loadRules()}>دریافت قوانین</button>
     {problem && <ProblemDetails problem={problem} />}{message && <p role="status">{message}</p>}
