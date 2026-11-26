@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "rules",
     "assessments",
     "reviews",
+    "blocklist",
 ]
 
 MIDDLEWARE = [
