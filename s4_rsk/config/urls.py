@@ -23,6 +23,7 @@ urlpatterns = [
     path("api/v1/", include("rules.urls")),
     path("api/v1/", include("reviews.urls")),
     path("api/v1/", include("dashboard.urls")),
+    path("api/v1/", include("blocklist.urls")),
 ]
 
 # Gunicorn does not serve Django's development static files itself.

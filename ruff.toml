@@ -24,4 +24,4 @@ ignore = [
 ]
 
 [lint.isort]
-known-first-party = ["config", "common", "assessments", "rules", "reviews", "integrations", "notifications"]
+known-first-party = ["config", "common", "assessments", "rules", "reviews", "blocklist", "integrations", "notifications"]
