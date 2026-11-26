@@ -1,5 +1,9 @@
 from django.urls import path
 
+from assessments.history_views import (
+    DecisionEventSearchView,
+    TransactionDecisionHistoryView,
+)
 from assessments.views import (
     RiskAssessmentCreateAPIView,
     RiskAssessmentDetailAPIView,
@@ -15,5 +19,15 @@ urlpatterns = [
         "risk-assessments/<uuid:decision_id>",
         RiskAssessmentDetailAPIView.as_view(),
         name="risk-assessment-detail",
+    ),
+    path(
+        "transactions/<uuid:transaction_id>/decisions",
+        TransactionDecisionHistoryView.as_view(),
+        name="transaction-decision-history",
+    ),
+    path(
+        "decision-events",
+        DecisionEventSearchView.as_view(),
+        name="decision-event-search",
     ),
 ]

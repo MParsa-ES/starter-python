@@ -19,3 +19,18 @@ class IsPaymentService(BasePermission):
         return bool(
             user and user.is_authenticated and user.is_active and user.groups.filter(name="payment_service").exists()
         )
+
+class CanReadDecisionHistory(BasePermission):
+    """Allow active users in risk management/operations roles to read decision history"""
+
+    allowed_groups = ("manager", "operator", "analyst")
+    message = "A risk manager, operator, or analyst role is required."
+
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user
+            and user.is_authenticated
+            and user.is_active
+            and user.groups.filter(name__in=self.allowed_groups).exists()
+        )
