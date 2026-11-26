@@ -8,6 +8,7 @@ on:
 
 jobs:
   test-and-lint:
+    name: backend
     runs-on: ubuntu-latest
     env:
       DEBUG: "True"
@@ -71,3 +72,36 @@ jobs:
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5432
         run: pytest
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Frontend Linter
+        run: npm run lint
+
+      - name: TypeScript Type Check
+        run: npx tsc -b --noEmit
+
+      - name: Run Frontend Tests
+        run: npm test
+
+      - name: Build Frontend
+        run: npm run build
