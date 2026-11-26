@@ -12,4 +12,5 @@ See [API testing](reports/us-02-api-testing.md) and the [test matrix](test-matri
 
 - Optional `max_daily_amount` and `max_daily_count` must be positive signed 64-bit integers; a configured `decision` must be `REVIEW` or `REJECT`.
 - When an enabled daily limit cannot be evaluated because no ledger client is configured, the engine returns `REVIEW` with `LEDGER_UNAVAILABLE` instead of silently approving it. The existing assessment API exposes the reason and rule snapshot to consumers.
-- Unit tests cover invalid configuration and missing ledger history. PostgreSQL integration and frontend end-to-end validation still require a running isolated database and an agreed frontend workflow.
+- The `/rules` frontend supports manager token authentication, listing and pagination, creating and editing rules with optimistic revision checks, and paginated audit history. The token remains in component memory. Production nginx proxies `/api/` to the backend. Integers outside JavaScript's safe range cannot be edited through this UI; use the API instead.
+- PostgreSQL-backed tests exercise management and assessment integration; frontend component tests cover editing, validation, and API errors. The ledger service must be configured for daily limits; its provider contract and deployment credentials remain a cross-team dependency.
