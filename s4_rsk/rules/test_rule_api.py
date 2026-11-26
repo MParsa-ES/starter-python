@@ -47,6 +47,33 @@ def test_create_update_and_read_audit(client_manager, payload):
     assert history[1]["before"] is None
 
 
+def test_managed_rules_change_assessment_decisions(client_manager, django_user_model):
+    manager, _ = client_manager
+    payment_user = django_user_model.objects.create_user("rule-payment-service")
+    payment_user.groups.add(Group.objects.get_or_create(name="payment_service")[0])
+    payment = APIClient()
+    payment.force_authenticate(user=payment_user)
+    created = manager.post(URL, {
+        "name": "Active limit", "type": "AMOUNT_LIMIT", "parameters": {"max_amount": 100}, "enabled": True,
+    }, format="json")
+    assert created.status_code == 201
+    payload = {
+        "transaction_id": str(uuid.uuid4()), "transfer_type": "INTERNAL",
+        "source_account_id": str(uuid.uuid4()), "destination_account_id": str(uuid.uuid4()),
+        "amount": 101, "currency": "IRR", "occurred_at": "2026-01-01T00:00:00Z",
+    }
+    first = payment.post("/api/v1/risk-assessments", payload, format="json")
+    assert first.status_code == 201
+    assert first.data["decision"] == "REJECT"
+    assert first.data["reasons"][0]["rule_revision"] == 1
+    changed = manager.patch(f"{URL}/{created.data['id']}", {"expected_revision": 1, "enabled": False}, format="json")
+    assert changed.status_code == 200
+    payload["transaction_id"] = str(uuid.uuid4())
+    second = payment.post("/api/v1/risk-assessments", payload, format="json")
+    assert second.status_code == 201
+    assert second.data["decision"] == "APPROVE"
+
+
 def test_post_replay_and_conflict(client_manager, payload):
     client, _ = client_manager
     key = str(uuid.uuid4())
