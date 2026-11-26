@@ -1,0 +1,30 @@
+meta {
+  name: 12 - Reject Invalid Manual Decision Payload (400)
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/v1/manual-review-queue/{{review_item_id}}/decision
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operator_access_token}}
+}
+
+body:json {
+  {
+    "decision": "REVIEW",
+    "reason": "   "
+  }
+}
+
+tests {
+  test("Invalid decision enum and blank reason return 400 VALIDATION_ERROR", function () {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getHeader("content-type")).to.include("application/problem+json");
+    expect(res.getBody().code).to.equal("VALIDATION_ERROR");
+  });
+}

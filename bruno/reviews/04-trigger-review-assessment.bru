@@ -1,0 +1,53 @@
+meta {
+  name: 04 - Trigger REVIEW Assessment as Payment Service (201)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/risk-assessments
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{payment_access_token}}
+}
+
+headers {
+  X-Correlation-ID: bruno-review-flow-001
+}
+
+body:json {
+  {
+    "transaction_id": "{{review_tx_id}}",
+    "transfer_type": "INTERNAL",
+    "source_account_id": "0192a7d1-0001-7000-8000-00000000a001",
+    "destination_account_id": "0192a7d1-0002-7000-8000-00000000a002",
+    "amount": 5000000,
+    "currency": "IRR",
+    "occurred_at": "2026-10-24T10:00:00Z"
+  }
+}
+
+script:pre-request {
+  const uuidv4 = () =>
+    "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c =>
+      (c ^ (Math.random() * 16) >> (c / 4)).toString(16)
+    );
+  bru.setVar("review_tx_id", uuidv4());
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("review_decision_id", res.getBody().decision_id);
+  }
+}
+
+tests {
+  test("Assessment evaluates to REVIEW and auto-enqueues item", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().decision).to.equal("REVIEW");
+    expect(res.getBody().decision_id).to.be.a("string");
+  });
+}

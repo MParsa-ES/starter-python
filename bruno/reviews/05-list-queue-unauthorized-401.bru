@@ -1,0 +1,19 @@
+meta {
+  name: 05 - Reject Anonymous Queue Access (401)
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/manual-review-queue
+  body: none
+  auth: none
+}
+
+tests {
+  test("Anonymous request returns 401 UNAUTHORIZED Problem Details", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getHeader("content-type")).to.include("application/problem+json");
+    expect(res.getBody().code).to.equal("UNAUTHORIZED");
+  });
+}

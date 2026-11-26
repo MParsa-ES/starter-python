@@ -1,0 +1,23 @@
+meta {
+  name: 11 - Reject Duplicate Claim Without Replay Key (409)
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/v1/manual-review-queue/{{review_item_id}}/claim
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operator_access_token}}
+}
+
+tests {
+  test("Claiming an already CLAIMED item returns 409 CONFLICT", function () {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getHeader("content-type")).to.include("application/problem+json");
+    expect(res.getBody().code).to.equal("CONFLICT");
+  });
+}
