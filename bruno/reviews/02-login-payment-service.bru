@@ -1,0 +1,31 @@
+meta {
+  name: 02 - Obtain Payment Service JWT (200)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/token/
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "{{paymentServiceUsername}}",
+    "password": "{{paymentServicePassword}}"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("payment_access_token", res.getBody().access);
+  }
+}
+
+tests {
+  test("Payment service login returns 200 and access token", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().access).to.be.a("string");
+  });
+}

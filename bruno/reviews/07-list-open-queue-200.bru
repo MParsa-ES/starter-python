@@ -1,0 +1,40 @@
+meta {
+  name: 07 - List OPEN Manual Review Queue (200)
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/v1/manual-review-queue?state=OPEN
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operator_access_token}}
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    const decisionId = bru.getVar("review_decision_id");
+    const items = res.getBody().items || [];
+    const match = items.find(i => i.decision_id === decisionId) || items[0];
+    if (match) {
+      bru.setVar("review_item_id", match.item_id);
+    }
+  }
+}
+
+tests {
+  test("Status is 200 and returns paginated OPEN items", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.items).to.be.an("array");
+    expect(body.items.length).to.be.greaterThan(0);
+    expect(body).to.have.property("next_cursor");
+    const item = body.items.find(i => i.decision_id === bru.getVar("review_decision_id"));
+    expect(item).to.be.an("object");
+    expect(item.state).to.equal("OPEN");
+    expect(item.claimed_by).to.equal(null);
+  });
+}
