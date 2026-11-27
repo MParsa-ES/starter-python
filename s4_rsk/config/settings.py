@@ -159,6 +159,10 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "OAS_VERSION": "3.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+            "DecisionEnum": ["APPROVE", "REJECT", "REVIEW"],
+            "ManualDecisionEnum": ["APPROVE", "REJECT"],
+        },
 }
 
 # Neighboring Services Configuration
