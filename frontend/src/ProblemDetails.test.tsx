@@ -26,7 +26,7 @@ describe("ProblemDetails (component)", () => {
   it("فیلدهای اختیاری نباشند، خطا نمی‌دهد و فقط عنوان و وضعیت را نشان می‌دهد", () => {
     render(<ProblemDetails problem={{ title: "Resource not found", status: 404 }} />);
     expect(screen.getByText("Resource not found")).toBeInTheDocument();
-    expect(screen.queryByText("کد خطا")).not.toBeInTheDocument();
+    expect(screen.queryByText("Error code")).not.toBeInTheDocument();
   });
 });
 

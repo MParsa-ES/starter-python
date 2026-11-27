@@ -34,7 +34,7 @@ export function RulesPage() {
 
   function fail(error: unknown, status: number) {
     const body = error as Partial<ProblemDetailsBody> | undefined;
-    setProblem({ title: body?.title ?? "خطا در ارتباط با سرور", status, ...body });
+    setProblem({ title: body?.title ?? "Server communication error", status, ...body });
   }
 
   async function loadRules(next?: string) {
@@ -46,7 +46,7 @@ export function RulesPage() {
       if (error || !data) return fail(error, response.status);
       setRules(previous => next ? [...previous, ...data.items] : data.items);
       setCursor(data.next_cursor);
-    } catch { setMessage("ارتباط با سرور برقرار نشد."); }
+    } catch { setMessage("Could not connect to the server."); }
   }
 
   async function loadHistory(ruleId: string, next?: string) {
@@ -59,12 +59,12 @@ export function RulesPage() {
       setHistoryRule(ruleId);
       setHistory(previous => next ? [...previous, ...data.items] : data.items);
       setHistoryCursor(data.next_cursor);
-    } catch { setMessage("ارتباط با سرور برقرار نشد."); }
+    } catch { setMessage("Could not connect to the server."); }
   }
 
   function edit(rule: Rule) {
     if (unsafeNumbers(rule.parameters)) {
-      setMessage("ویرایش اعداد بزرگ‌تر از محدودهٔ دقیق مرورگر پشتیبانی نمی‌شود؛ از API استفاده کنید.");
+      setMessage("Numbers outside the browser's safe integer range cannot be edited here; use the API.");
       return;
     }
     setEditing(rule); setName(rule.name); setType(rule.type);
@@ -84,7 +84,7 @@ export function RulesPage() {
       parsed = JSON.parse(parameters);
       if (!parsed || Array.isArray(parsed) || typeof parsed !== "object" || unsafeNumbers(parsed)) throw new Error();
       if (effectiveAt && (!/(Z|[+-]\d{2}:\d{2})$/i.test(effectiveAt) || Number.isNaN(Date.parse(effectiveAt)))) throw new Error();
-    } catch { setMessage("پارامترها باید یک شیء JSON با اعداد صحیح دقیق و زمان معتبر باشند."); return; }
+    } catch { setMessage("Parameters must be a JSON object with safe integers and a valid time."); return; }
     const fields = { name, parameters: parsed, enabled, ...(effectiveAt ? { effective_at: new Date(effectiveAt).toISOString() } : {}) };
     setBusy(true);
     try {
@@ -98,31 +98,31 @@ export function RulesPage() {
         : await api.POST("/risk-rules", { headers: { ...headers, "Idempotency-Key": pendingCreate.current!.key }, body: createBody });
       if (result.error || !result.data) return fail(result.error, result.response.status);
       pendingCreate.current = null;
-      reset(); setMessage("قانون ذخیره شد."); await loadRules();
-    } catch { setMessage("ارتباط با سرور برقرار نشد؛ پیش از تکرار، فهرست قوانین را بررسی کنید."); }
+      reset(); setMessage("Rule saved."); await loadRules();
+    } catch { setMessage("Could not connect to the server; check the rule list before retrying."); }
     finally { setBusy(false); }
   }
 
-  return <main className="card rules-card" dir="rtl">
-    <h1>مدیریت قوانین ریسک</h1><p className="sub">ساخت، ویرایش و مشاهدهٔ سابقهٔ قوانین</p>
-    <p><a href="/health">وضعیت سرویس</a></p>
-    <label>توکن مدیر <input type="password" value={token} onChange={event => { setToken(event.target.value); setRules([]); setCursor(null); setHistory([]); setHistoryRule(null); pendingCreate.current = null; reset(); }} autoComplete="off" /></label>
-    <button type="button" disabled={!token} onClick={() => void loadRules()}>دریافت قوانین</button>
+  return <main className="card rules-card" dir="ltr">
+    <h1>Risk rule management</h1><p className="sub">Create, edit, and review rule history</p>
+    <p><a href="/health">Service health</a></p>
+    <label>Manager token <input type="password" value={token} onChange={event => { setToken(event.target.value); setRules([]); setCursor(null); setHistory([]); setHistoryRule(null); pendingCreate.current = null; reset(); }} autoComplete="off" /></label>
+    <button type="button" disabled={!token} onClick={() => void loadRules()}>Load rules</button>
     {problem && <ProblemDetails problem={problem} />}{message && <p role="status">{message}</p>}
     <form onSubmit={event => void save(event)}>
-      <h2>{editing ? `ویرایش نسخهٔ ${editing.revision}` : "قانون جدید"}</h2>
-      <label>نام <input required maxLength={120} value={name} onChange={event => setName(event.target.value)} /></label>
-      <label>نوع <select disabled={!!editing} value={type} onChange={event => setType(event.target.value as Rule["type"])}><option value="AMOUNT_LIMIT">سقف مبلغ</option><option value="BLOCKLIST">فهرست مسدود</option></select></label>
-      <label>پارامترها (JSON) <textarea value={parameters} onChange={event => setParameters(event.target.value)} /></label>
-      <label>زمان اجرا (ISO 8601 با منطقهٔ زمانی) <input dir="ltr" placeholder="2026-11-26T12:00:00Z" value={effectiveAt} onChange={event => setEffectiveAt(event.target.value)} /></label>
-      <label><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} /> فعال</label>
-      <button disabled={!token || busy} type="submit">ذخیره</button>{editing && <button type="button" onClick={reset}>انصراف</button>}
+      <h2>{editing ? `Edit revision ${editing.revision}` : "New rule"}</h2>
+      <label>Name <input required maxLength={120} value={name} onChange={event => setName(event.target.value)} /></label>
+      <label>Type <select disabled={!!editing} value={type} onChange={event => setType(event.target.value as Rule["type"])}><option value="AMOUNT_LIMIT">Amount limit</option><option value="BLOCKLIST">Blocklist</option></select></label>
+      <label>Parameters (JSON) <textarea value={parameters} onChange={event => setParameters(event.target.value)} /></label>
+      <label>Effective time (ISO 8601 with time zone) <input dir="ltr" placeholder="2026-11-26T12:00:00Z" value={effectiveAt} onChange={event => setEffectiveAt(event.target.value)} /></label>
+      <label><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} /> Enabled</label>
+      <button disabled={!token || busy} type="submit">Save</button>{editing && <button type="button" onClick={reset}>Cancel</button>}
     </form>
-    <h2>قوانین</h2>{rules.map(rule => <section className="rule-item" key={rule.id}>
-      <h2>{rule.name}</h2><p>{rule.type} · نسخه {rule.revision} · {rule.enabled ? "فعال" : "غیرفعال"}</p>
+    <h2>Rules</h2>{rules.map(rule => <section className="rule-item" key={rule.id}>
+      <h2>{rule.name}</h2><p>{rule.type} · Revision {rule.revision} · {rule.enabled ? "Enabled" : "Disabled"}</p>
       <p dir="ltr">{rule.effective_at}</p><pre>{JSON.stringify(rule.parameters, null, 2)}</pre>
-      <button type="button" onClick={() => edit(rule)}>ویرایش</button><button type="button" onClick={() => void loadHistory(rule.id)}>تاریخچه</button>
-      {historyRule === rule.id && <div><h3>تاریخچه</h3>{history.map(item => <section key={item.revision}><p>نسخه {item.revision} · {item.actor} · {item.changed_at}</p><pre>{JSON.stringify({ before: item.before, after: item.after }, null, 2)}</pre></section>)}{historyCursor && <button type="button" onClick={() => void loadHistory(rule.id, historyCursor)}>تاریخچهٔ بیشتر</button>}</div>}
-    </section>)}{cursor && <button type="button" onClick={() => void loadRules(cursor)}>قوانین بیشتر</button>}
+      <button type="button" onClick={() => edit(rule)}>Edit</button><button type="button" onClick={() => void loadHistory(rule.id)}>History</button>
+      {historyRule === rule.id && <div><h3>History</h3>{history.map(item => <section key={item.revision}><p>Revision {item.revision} · {item.actor} · {item.changed_at}</p><pre>{JSON.stringify({ before: item.before, after: item.after }, null, 2)}</pre></section>)}{historyCursor && <button type="button" onClick={() => void loadHistory(rule.id, historyCursor)}>More history</button>}</div>}
+    </section>)}{cursor && <button type="button" onClick={() => void loadRules(cursor)}>More rules</button>}
   </main>;
 }

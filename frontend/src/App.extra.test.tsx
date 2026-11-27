@@ -22,7 +22,7 @@ describe('صفحه‌ی /health', () => {
 
     render(<App />)
 
-    expect(await screen.findByText(/بک‌اند در دسترس است/)).toBeInTheDocument()
+    expect(await screen.findByText(/Backend is available/)).toBeInTheDocument()
     expect(screen.getByText(/"service": "s4-rsk"/)).toBeInTheDocument()
   })
 
@@ -32,7 +32,7 @@ describe('صفحه‌ی /health', () => {
 
     render(<App />)
 
-    expect(await screen.findByText(/خطا: Failed to fetch/)).toBeInTheDocument()
+    expect(await screen.findByText(/Error: Failed to fetch/)).toBeInTheDocument()
   })
 
   it('آدرس ناشناخته صفحه‌ی ۴۰۴ را نشان می‌دهد', () => {
@@ -40,7 +40,7 @@ describe('صفحه‌ی /health', () => {
 
     render(<App />)
 
-    expect(screen.getByText('۴۰۴')).toBeInTheDocument()
+    expect(screen.getByText('404')).toBeInTheDocument()
   })
 
   it('خطای Problem Details را با کد و شناسهٔ ردیابی نشان می‌دهد', async () => {
@@ -87,7 +87,7 @@ describe('صفحه‌ی /health', () => {
 
     render(<App />)
 
-    expect(await screen.findByText(/خطا: HTTP 500/)).toBeInTheDocument()
+    expect(await screen.findByText(/Error: HTTP 500/)).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -101,10 +101,10 @@ describe('صفحه‌ی /health', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(<App />)
-    await screen.findByText(/بک‌اند در دسترس است/)
-    fireEvent.click(screen.getByRole('button', { name: 'بررسی دوباره' }))
+    await screen.findByText(/Backend is available/)
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
 
-    await screen.findByText(/بک‌اند در دسترس است/)
+    await screen.findByText(/Backend is available/)
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
