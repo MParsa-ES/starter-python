@@ -24,12 +24,12 @@ export function ExplanationsPage() {
       });
       if (error || !data) {
         const body = error as Partial<ProblemDetailsBody> | undefined;
-        setProblem({ title: body?.title ?? "خطا در دریافت دلایل", status: response.status, ...body });
+        setProblem({ title: body?.title ?? "Could not retrieve reasons", status: response.status, ...body });
         return;
       }
       setLoadedId(id); setItems(previous => next ? [...(previous ?? []), ...data.items] : data.items);
       setCursor(data.next_cursor);
-    } catch { setMessage("ارتباط با سرور برقرار نشد."); }
+    } catch { setMessage("Could not connect to the server."); }
   }
 
   function submit(event: FormEvent) {
@@ -37,21 +37,21 @@ export function ExplanationsPage() {
     void load(decisionId.trim());
   }
 
-  return <main className="card rules-card" dir="rtl">
-    <h1>دلایل تصمیم ریسک</h1><p className="sub">مشاهدهٔ دلایل ثبت‌شده برای شناسهٔ تصمیم</p>
-    <p><a href="/rules">مدیریت قوانین</a> · <a href="/health">وضعیت سرویس</a></p>
+  return <main className="card rules-card" dir="ltr">
+    <h1>Risk decision reasons</h1><p className="sub">View recorded reasons for a decision ID</p>
+    <p><a href="/rules">Rule management</a> · <a href="/health">Service health</a></p>
     <form onSubmit={submit}>
-      <label>توکن دسترسی <input type="password" autoComplete="off" value={token} onChange={event => { setToken(event.target.value); setItems(null); setCursor(null); }} /></label>
-      <label>شناسهٔ تصمیم <input dir="ltr" required value={decisionId} onChange={event => setDecisionId(event.target.value)} /></label>
-      <button type="submit" disabled={!token}>دریافت دلایل</button>
+      <label>Access token <input type="password" autoComplete="off" value={token} onChange={event => { setToken(event.target.value); setItems(null); setCursor(null); }} /></label>
+      <label>Decision ID <input dir="ltr" required value={decisionId} onChange={event => setDecisionId(event.target.value)} /></label>
+      <button type="submit" disabled={!token}>Load reasons</button>
     </form>
     {problem && <ProblemDetails problem={problem} />}{message && <p role="status">{message}</p>}
-    {items && items.length === 0 && <p>دلیلی ثبت نشده است.</p>}
+    {items && items.length === 0 && <p>No reasons have been recorded.</p>}
     {items?.map((item, index) => <section className="rule-item" key={`${item.code}-${index}`}>
       <h2 dir="ltr">{item.code}</h2><p dir="ltr">{item.message}</p>
-      {item.rule_id && <p>شناسهٔ قانون: <code dir="ltr">{item.rule_id}</code></p>}
-      {item.rule_revision != null && <p>نسخهٔ قانون: {item.rule_revision}</p>}
+      {item.rule_id && <p>Rule ID: <code dir="ltr">{item.rule_id}</code></p>}
+      {item.rule_revision != null && <p>Rule revision: {item.rule_revision}</p>}
     </section>)}
-    {cursor && <button type="button" onClick={() => void load(loadedId, cursor)}>دلایل بیشتر</button>}
+    {cursor && <button type="button" onClick={() => void load(loadedId, cursor)}>More reasons</button>}
   </main>;
 }
