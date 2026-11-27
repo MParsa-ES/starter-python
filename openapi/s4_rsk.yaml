@@ -168,6 +168,35 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /risk-assessments/{decision_id}/reasons:
+    get:
+      tags: [Risk Assessments]
+      operationId: listDecisionExplanations
+      summary: List recorded reasons for a decision
+      description: Accessible to active manager, operator, and analyst users. Rule parameters are not exposed.
+      parameters:
+        - name: decision_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Reasons in creation order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/DecisionExplanation'}
+                  next_cursor: {type: [string, 'null']}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /risk-assessments/{decision_id}:
     get:
       tags: [Risk Assessments]
@@ -841,6 +870,14 @@ components:
             detail: Database connection check failed.
             correlation_id: 7f3c1e52-5a0b-4a4f-9c1e-0d2b6a9f1c33
   schemas:
+    DecisionExplanation:
+      type: object
+      required: [code, message, rule_id, rule_revision]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        rule_id: {type: [string, 'null'], format: uuid}
+        rule_revision: {type: [integer, 'null']}
     Problem:
       type: object
       description: |

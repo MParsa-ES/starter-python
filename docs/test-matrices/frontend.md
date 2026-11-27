@@ -1,15 +1,15 @@
-# ماتریس تست فرانت‌اند (Component Test با Vitest و React Testing Library)
+# Frontend test matrix (Vitest and React Testing Library component tests)
 
-| شناسه | سناریو | ورودی (fetch ساختگی) | نتیجهٔ مورد انتظار | Edge | تست |
+| ID | Scenario | Input (mock fetch) | Expected result | Edge case | Test |
 |---|---|---|---|---|---|
-| F-01 | سلامت موفق | 200 با `{status: UP}` | پیام «بک‌اند در دسترس است» و JSON سرویس | خیر | `با پاسخ ۲۰۰ بک‌اند، پیام موفقیت را نشان می‌دهد` |
-| F-02 | خطای شبکه | `fetch` رد می‌شود | «خطا: Failed to fetch» | بله | `اگر بک‌اند خطا بدهد، پیام خطا را نشان می‌دهد` |
-| F-03 | مسیر ناشناخته | آدرس `/abc` | صفحهٔ ۴۰۴ | بله | `آدرس ناشناخته صفحه‌ی ۴۰۴ را نشان می‌دهد` |
-| F-04 | Problem Details | 503 با `application/problem+json` | عنوان، کد، توضیح و `correlation_id` نمایش داده می‌شود | بله | `خطای Problem Details را با کد و شناسهٔ ردیابی نشان می‌دهد` |
-| F-05 | خطای HTTP بدون Problem Details | 500 با متن ساده | پیام کلی «HTTP 500» بدون جزئیات ساختگی | بله | `خطای HTTP عادی را بدون جزئیات Problem نشان می‌دهد` |
-| F-06 | تلاش دوباره | کلیک روی «بررسی دوباره» | `fetch` دوباره صدا زده می‌شود | خیر | `کلیک روی بررسی دوباره درخواست تازه می‌فرستد` |
+| F-01 | Successful health check | 200 with `{status: UP}` | Backend availability message and service JSON | No | `App.extra.test.tsx` |
+| F-02 | Network failure | `fetch` rejects | An error including `Failed to fetch` | Yes | `App.extra.test.tsx` |
+| F-03 | Unknown route | `/abc` | 404 page | Yes | `App.extra.test.tsx` |
+| F-04 | Problem Details | 503 with `application/problem+json` | Display title, code, detail, and `correlation_id` | Yes | `App.extra.test.tsx` |
+| F-05 | HTTP error without Problem Details | 500 with plain text | Generic `HTTP 500` message without fabricated details | Yes | `App.extra.test.tsx` |
+| F-06 | Retry | Click the retry button | `fetch` is called again | No | `App.extra.test.tsx` |
 
-## پوشش‌نیافته‌ها
+## Coverage notes
 
-- فرم و فهرست قوانین (US-02C): هنوز پیاده‌سازی نشده‌اند؛ تست‌های کامپوننتشان همراه همان استوری در اسپرینت ۴ می‌آید.
-- تست E2E با Playwright: در جلسهٔ ۵ لازم نیست؛ فقط ابزار نصب شده است.
+- Rule management component tests are in `RulesPage.test.tsx`.
+- Playwright end-to-end coverage was not required in session 5; only the tool was installed.

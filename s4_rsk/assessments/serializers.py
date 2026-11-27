@@ -159,6 +159,13 @@ class DecisionReasonResponseSerializer(serializers.Serializer):
         return data
 
 
+class DecisionExplanationSerializer(serializers.Serializer):
+    code = serializers.CharField(read_only=True)
+    message = serializers.CharField(read_only=True)
+    rule_id = serializers.UUIDField(read_only=True, allow_null=True)
+    rule_revision = serializers.IntegerField(read_only=True, allow_null=True)
+
+
 class RiskAssessmentResponseSerializer(serializers.Serializer):
     """
     Output contract for POST /api/v1/risk-assessments (201 Created)

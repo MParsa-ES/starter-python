@@ -18,7 +18,7 @@ describe("App / HealthPage (component)", () => {
       }),
     );
     render(<App />);
-    expect(await screen.findByText(/بک‌اند در دسترس است/)).toBeInTheDocument();
+    expect(await screen.findByText(/Backend is available/)).toBeInTheDocument();
     expect(screen.getByText(/"status": "UP"/)).toBeInTheDocument();
   });
 

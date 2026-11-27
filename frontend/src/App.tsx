@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import "./App.css";
 import { ProblemDetails } from "./ProblemDetails";
 import { readProblem, type ProblemDetailsBody } from "./problem";
+import { RulesPage } from "./RulesPage";
+import { ExplanationsPage } from "./ExplanationsPage";
 
-// آدرس بک‌اند از متغیر محیطی Vite خوانده می‌شود (فایل .env.local)؛ در کد ثابت نیست.
+// Read the backend address from the Vite environment configuration.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8084";
 
 type HealthResponse = { status: string; service: string };
@@ -44,7 +46,7 @@ function HealthPage() {
         message:
           err instanceof Error
             ? err.message
-            : "خطای ناشناخته (بک‌اند بالا است؟ CORS؟)",
+            : "Unknown error (is the backend running and CORS configured?)",
       });
     }
   }, []);
@@ -54,26 +56,26 @@ function HealthPage() {
   }, [check]);
 
   return (
-    <main className="card" dir="rtl">
+    <main className="card" dir="ltr">
       <h1>LabBank · S4-RSK</h1>
-      <p className="sub">سرویس ریسک و تقلب — بررسی سلامت بک‌اند</p>
+      <p className="sub">Risk and fraud service — backend health</p>
 
       <div className="row">
-        <span>آدرس</span>
+        <span>Address</span>
         <code dir="ltr">GET {API_BASE_URL}/health</code>
       </div>
 
-      {state.kind === "loading" && <p className="badge wait">در حال بررسی…</p>}
+      {state.kind === "loading" && <p className="badge wait">Checking…</p>}
 
       {state.kind === "ok" && (
         <>
-          <p className="badge ok">بک‌اند در دسترس است ✔</p>
+          <p className="badge ok">Backend is available ✔</p>
           <div className="row">
-            <span>وضعیت HTTP</span>
+            <span>HTTP status</span>
             <code dir="ltr">{state.httpStatus}</code>
           </div>
           <div className="row">
-            <span>زمان پاسخ</span>
+            <span>Response time</span>
             <code dir="ltr">{state.ms} ms</code>
           </div>
           <pre dir="ltr">{JSON.stringify(state.data, null, 2)}</pre>
@@ -83,15 +85,15 @@ function HealthPage() {
       {state.kind === "problem" && <ProblemDetails problem={state.problem} />}
 
       {state.kind === "error" && (
-        <p className="badge err">خطا: {state.message}</p>
+        <p className="badge err">Error: {state.message}</p>
       )}
 
-      <button onClick={() => void check()}>بررسی دوباره</button>
+      <button onClick={() => void check()}>Check again</button>
     </main>
   );
 }
 
-// مسیریابی ساده بدون کتابخانه: صفحه‌ی اصلی روی /health است و "/" به آن منتقل می‌شود.
+// Route the root path to the health page without a routing library.
 export default function App() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
   if (path === "/") {
@@ -99,10 +101,12 @@ export default function App() {
     return <HealthPage />;
   }
   if (path === "/health") return <HealthPage />;
+  if (path === "/rules") return <RulesPage />;
+  if (path === "/explanations") return <ExplanationsPage />;
   return (
-    <main className="card" dir="rtl">
-      <h1>۴۰۴</h1>
-      <p className="sub">این آدرس وجود ندارد. <a href="/health">رفتن به /health</a></p>
+    <main className="card" dir="ltr">
+      <h1>404</h1>
+      <p className="sub">This page does not exist. <a href="/health">Go to /health</a></p>
     </main>
   );
 }

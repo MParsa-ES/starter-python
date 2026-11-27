@@ -1,23 +1,23 @@
-# ماتریس تست مصرف‌کننده: کلاینت دفترکل S2-LDG
+# Consumer test matrix: S2-LDG ledger client
 
-وضعیت: کلاینت `s4_rsk/integrations/ledger_client.py` آزمون شده است ولی هنوز در `assessments.services` فراخوانی نمی‌شود (US-01B). پاسخ‌های Stub از مثال‌های `openapi/neighbors/s2_ldg.yaml` گرفته شده‌اند. اگر فایل واقعی S2 جایگزین شد، تست‌ها دوباره اجرا شوند.
+The client in `s4_rsk/integrations/ledger_client.py` is tested. The original matrix preceded its integration with `assessments.services` (US-01B). Stub responses are based on `openapi/neighbors/s2_ldg.yaml`; rerun the tests if the actual S2 contract replaces it.
 
-| شناسه | سناریو | پاسخ Stub / ورودی | نتیجهٔ مورد انتظار | Edge | تست خودکار |
+| ID | Scenario | Stub response / input | Expected result | Edge case | Automated test |
 |---|---|---|---|---|---|
-| L-01 | پاسخ موفق | 200 با دو بدهکاری | دو ورودی تجزیه‌شده، وضعیت OK، بدون تصمیم اجباری؛ درخواست شامل `direction=DEBIT`، `from` و `X-Correlation-ID` | خیر | `test_success_returns_parsed_debits_and_sends_the_draft_request` |
-| L-02 | صفحه‌بندی | صفحهٔ اول با `next_cursor` | درخواست دوم با همان cursor و ادغام نتایج | بله | `test_pagination_follows_next_cursor_until_exhausted` |
-| L-03 | حساب ناموجود | 404 Problem Details | `ACCOUNT_NOT_FOUND` و تصمیم اجباری REVIEW | بله | `test_unknown_account_forces_review_with_explicit_reason` |
-| L-04 | Timeout | استثنای `ConnectTimeout` | `LEDGER_UNAVAILABLE` و REVIEW بدون پرتاب خطا | بله | `test_timeout_forces_review_instead_of_raising` |
-| L-05 | خطای سرور | 503 Problem Details | `LEDGER_UNAVAILABLE` و REVIEW | بله | `test_server_error_forces_review` |
-| L-06 | بدنهٔ ناقص | 200 بدون فیلد `amount` | خطا، نه اعتماد به داده؛ REVIEW | بله | `test_malformed_success_body_is_not_trusted` |
-| L-07 | آدرس همسایه | `NEIGHBOR_BASE_URL` | درخواست به همان میزبان و پورت می‌رود | خیر | `test_neighbor_base_url_environment_variable_selects_the_host` |
-| L-08 | آدرس تنظیم‌نشده | بدون متغیر محیطی | خطای روشن، نه آدرس حدسی | بله | `test_missing_neighbor_base_url_is_a_clear_error` |
-| L-09 | خطای غیرمنتظرهٔ ۴xx | 403 | خطا، نه تاریخچهٔ خالی؛ تصمیم اجباری REVIEW | بله | `test_unexpected_client_error_is_not_treated_as_empty_history` |
-| L-10 | زنجیرهٔ بی‌پایان cursor | هر صفحه `next_cursor` دارد | قطع پس از سقف صفحه‌ها با خطا | بله | `test_endless_cursor_chain_is_cut_off` |
-| L-11 | توکن سرویس | کلاینت با `token` | هدر `Authorization: Bearer` ارسال می‌شود | خیر | `test_bearer_token_is_sent_when_configured` |
-| L-12 | Contract Test روی Prism یا همسایهٔ واقعی | `NEIGHBOR_BASE_URL` | موفق و خطا با قرارداد همسایه می‌خوانند | خیر | `test_ledger_contract.py` (نشانگر `contract`) |
+| L-01 | Successful response | 200 with two debits | Two parsed entries, OK status, no forced decision; request includes `direction=DEBIT`, `from`, and `X-Correlation-ID` | No | `test_success_returns_parsed_debits_and_sends_the_draft_request` |
+| L-02 | Pagination | First page has `next_cursor` | Request the next page with that cursor and combine results | Yes | `test_pagination_follows_next_cursor_until_exhausted` |
+| L-03 | Unknown account | 404 Problem Details | `ACCOUNT_NOT_FOUND` and forced REVIEW | Yes | `test_unknown_account_forces_review_with_explicit_reason` |
+| L-04 | Timeout | `ConnectTimeout` exception | `LEDGER_UNAVAILABLE` and REVIEW without propagating the error | Yes | `test_timeout_forces_review_instead_of_raising` |
+| L-05 | Server error | 503 Problem Details | `LEDGER_UNAVAILABLE` and REVIEW | Yes | `test_server_error_forces_review` |
+| L-06 | Incomplete body | 200 without `amount` | Reject the data and return REVIEW | Yes | `test_malformed_success_body_is_not_trusted` |
+| L-07 | Neighbor address | `NEIGHBOR_BASE_URL` | Send the request to the configured host and port | No | `test_neighbor_base_url_environment_variable_selects_the_host` |
+| L-08 | Missing address | No environment variable | Clear error rather than a guessed address | Yes | `test_missing_neighbor_base_url_is_a_clear_error` |
+| L-09 | Unexpected 4xx | 403 | Error rather than empty history; forced REVIEW | Yes | `test_unexpected_client_error_is_not_treated_as_empty_history` |
+| L-10 | Endless cursor chain | Every page has `next_cursor` | Stop with an error after the page limit | Yes | `test_endless_cursor_chain_is_cut_off` |
+| L-11 | Service token | Client configured with `token` | Send the `Authorization: Bearer` header | No | `test_bearer_token_is_sent_when_configured` |
+| L-12 | Contract test against Prism or a real neighbor | `NEIGHBOR_BASE_URL` | Success and error responses match the neighbor contract | No | `test_ledger_contract.py` (`contract` marker) |
 
-## پوشش‌نیافته‌ها
+## Coverage gaps
 
-- احراز هویت سرویس‌به‌سرویس به S2: روش آن هنوز با تیم S2 توافق نشده؛ فقط ارسال هدر آزموده شده (L-11)، نه پذیرفته‌شدن توسط S2.
-- retry با backoff: عمداً پیاده‌سازی نشده است؛ هر خطا یک سیگنال REVIEW است (طبق نمودار توالی جلسهٔ ۴).
+- Service-to-service authentication with S2 still requires agreement with the S2 team; only sending the header is tested (L-11), not acceptance by S2.
+- Retry with backoff is intentionally not implemented; failures produce a REVIEW signal, according to the session 4 sequence diagram.
