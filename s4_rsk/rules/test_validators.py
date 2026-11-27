@@ -24,3 +24,19 @@ def test_blocklist_accepts_empty_object():
 def test_old_field_name_is_rejected(parameters):
     with pytest.raises(ValidationError):
         validate_rule_parameters("AMOUNT_LIMIT", parameters)
+
+
+@pytest.mark.parametrize("field", ["max_daily_amount", "max_daily_count"])
+@pytest.mark.parametrize("value", [0, -1, True, 1.5, 2**63, None])
+def test_invalid_daily_limits_are_rejected(field, value):
+    with pytest.raises(ValidationError):
+        validate_rule_parameters("AMOUNT_LIMIT", {"max_amount": 1, field: value})
+
+
+@pytest.mark.parametrize("rule_type,parameters", [
+    ("AMOUNT_LIMIT", {"max_amount": 1, "decision": "APPROVE"}),
+    ("BLOCKLIST", {"decision": "invalid"}),
+])
+def test_invalid_rule_decisions_are_rejected(rule_type, parameters):
+    with pytest.raises(ValidationError):
+        validate_rule_parameters(rule_type, parameters)

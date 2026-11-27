@@ -1,15 +1,15 @@
-# پیش‌نویس ماتریس US-08: توضیح‌پذیری تصمیم
+# Draft US-08 test matrix: decision explainability
 
-این پیش‌نویس مشخصات نهایی استوری نیست. در مدل فعلی `DecisionReason` فیلدهای code، message، rule_id، rule_revision و rule_snapshot وجود دارند؛ وجود این مدل به‌تنهایی اثبات کامل بودن API یا برآورده‌شدن استوری نیست. endpoint، نقش‌های مجاز، قرارداد پاسخ، تعداد علت‌ها و نحوه نمایش داده حساس باید با تیم توافق شوند.
+This draft is not the final story specification. The current `DecisionReason` model includes code, message, rule_id, rule_revision, and rule_snapshot; the model alone does not prove the API or story is complete. The endpoint, permitted roles, response contract, number of reasons, and handling of sensitive data require team agreement.
 
-| شناسه | سناریوی پیشنهادی | ورودی / شرایط | نتیجه پیشنهادی؛ نیازمند توافق | سطح پیشنهادی |
+| ID | Proposed scenario | Input / conditions | Proposed result; requires agreement | Proposed level |
 |---|---|---|---|---|
-| R08-01 | دلیل تصمیم منطبق با قانون | تصمیم با یک قانون منطبق | code، message و شناسه و نسخه قانون مرتبط قابل مشاهده | integration |
-| R08-02 | چند دلیل | بیش از یک قانون منطبق | همه دلایل طبق ترتیب توافقی برگردند | integration |
-| R08-03 | هیچ قانونی منطبق نیست | تصمیم بدون تطبیق | دلیل یا پیام قراردادی مشخص و بدون داده ساختگی | unit و integration |
-| R08-04 | حفظ سابقه پس از ویرایش قانون | تغییر پارامتر بعد از تصمیم | snapshot و revision تصمیم قدیمی تغییر نکنند | integration |
-| R08-05 | تصمیم ناموجود | UUID معتبر اما ناموجود | پاسخ 404 قراردادی | API |
-| R08-06 | مجوز مشاهده | بدون JWT، نقش غیرمجاز، نقش مجاز | به‌ترتیب 401، 403 و پاسخ مجاز | API |
-| R08-07 | داده ناقص یا مقدار مرزی | پیام خالی/طول حداکثر/بیش از سقف و rule_id خالی | مطابق اعتبارسنجی و قرارداد نهایی | unit |
-| R08-08 | داده حساس | اطلاعات پرداخت در جزئیات | خروجی صرفاً شامل داده مجاز طبق سیاست توافق‌شده | امنیتی/API |
-| R08-09 | صفحه‌بندی | صفر، یک و تعداد زیاد دلایل | نتیجه و ترتیب مطابق قرارداد صفحه‌بندی | integration، در صورت پشتیبانی |
+| R08-01 | Decision reason from a matching rule | Decision with one matching rule | Display code, message, and associated rule ID and revision | Integration |
+| R08-02 | Multiple reasons | More than one matching rule | Return all reasons in the agreed order | Integration |
+| R08-03 | No matching rule | Decision without a match | Defined contractual reason or message without fabricated data | Unit and integration |
+| R08-04 | Preserve history after rule changes | Change parameters after a decision | Snapshot and revision of the previous decision remain unchanged | Integration |
+| R08-05 | Missing decision | Valid but unknown UUID | Contractual 404 response | API |
+| R08-06 | Read permission | No JWT, unauthorized role, authorized role | 401, 403, and successful response respectively | API |
+| R08-07 | Missing or boundary data | Empty message, maximum length, over-limit message, and null rule_id | Follow validation and final contract | Unit |
+| R08-08 | Sensitive data | Payment information in details | Output only data permitted by the agreed policy | Security / API |
+| R08-09 | Pagination | Zero, one, and many reasons | Results and ordering follow the pagination contract | Integration, if supported |

@@ -104,6 +104,18 @@ def _evaluate_amount_limit(ctx: EvaluationContext, rule: RiskRule) -> list[RuleM
             )
         )
 
+    if ctx.ledger_history is None and any(key in params for key in ("max_daily_amount", "max_daily_count")):
+        matches.append(
+            RuleMatch(
+                code="LEDGER_UNAVAILABLE",
+                message="Daily limits cannot be evaluated without ledger history.",
+                decision=DecisionType.REVIEW,
+                rule_id=rule.id,
+                rule_revision=rule.revision,
+                rule_snapshot=snapshot,
+            )
+        )
+
     if ctx.ledger_history is not None and ctx.ledger_history.status == STATUS_OK:
         prior_entries = ctx.ledger_history.entries
 
