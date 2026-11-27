@@ -4,7 +4,7 @@ import { ProblemDetails } from "./ProblemDetails";
 import { readProblem, type ProblemDetailsBody } from "./problem";
 import { RulesPage } from "./RulesPage";
 
-// آدرس بک‌اند از متغیر محیطی Vite خوانده می‌شود (فایل .env.local)؛ در کد ثابت نیست.
+// Read the backend address from the Vite environment configuration.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8084";
 
 type HealthResponse = { status: string; service: string };
@@ -92,7 +92,7 @@ function HealthPage() {
   );
 }
 
-// مسیریابی ساده بدون کتابخانه: صفحه‌ی اصلی روی /health است و "/" به آن منتقل می‌شود.
+// Route the root path to the health page without a routing library.
 export default function App() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
   if (path === "/") {
