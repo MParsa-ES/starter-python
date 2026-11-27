@@ -1,0 +1,39 @@
+meta {
+  name: 09 - Claim Review Item Atomically (200)
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/manual-review-queue/{{review_item_id}}/claim
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operator_access_token}}
+}
+
+headers {
+  X-Correlation-ID: bruno-claim-001
+  Idempotency-Key: {{claim_idempotency_key}}
+}
+
+script:pre-request {
+  const uuidv4 = () =>
+    "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c =>
+      (c ^ (Math.random() * 16) >> (c / 4)).toString(16)
+    );
+  bru.setVar("claim_idempotency_key", uuidv4());
+}
+
+tests {
+  test("Claim transitions item to CLAIMED by current operator", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.item_id).to.equal(bru.getVar("review_item_id"));
+    expect(body.state).to.equal("CLAIMED");
+    expect(body.claimed_by).to.be.a("string");
+    expect(res.getHeader("x-correlation-id")).to.equal("bruno-claim-001");
+  });
+}

@@ -1,0 +1,26 @@
+meta {
+  name: 10 - Replay Claim with Same Idempotency-Key (200)
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/v1/manual-review-queue/{{review_item_id}}/claim
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operator_access_token}}
+}
+
+headers {
+  Idempotency-Key: {{claim_idempotency_key}}
+}
+
+tests {
+  test("Identical Idempotency-Key safely replays 200 CLAIMED response", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().state).to.equal("CLAIMED");
+  });
+}

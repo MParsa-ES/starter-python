@@ -1,0 +1,23 @@
+meta {
+  name: 06 - Reject Non-Operator Queue Access (403)
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/v1/manual-review-queue
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{manager_access_token}}
+}
+
+tests {
+  test("Authenticated manager without operator role returns 403 FORBIDDEN", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.getHeader("content-type")).to.include("application/problem+json");
+    expect(res.getBody().code).to.equal("FORBIDDEN");
+  });
+}
