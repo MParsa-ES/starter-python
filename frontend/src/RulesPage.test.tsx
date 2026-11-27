@@ -14,24 +14,24 @@ describe("rule management", () => {
     vi.mocked(api.GET).mockResolvedValue({ data: { items: [rule], next_cursor: null }, response: new Response() } as never);
     vi.mocked(api.PATCH).mockResolvedValue({ data: { ...rule, revision: 2 }, response: new Response() } as never);
     render(<RulesPage />);
-    fireEvent.change(screen.getByLabelText("توکن مدیر"), { target: { value: "token" } });
-    fireEvent.click(screen.getByText("دریافت قوانین"));
-    fireEvent.click(await screen.findByText("ویرایش"));
-    fireEvent.change(screen.getByLabelText("نام"), { target: { value: "Updated" } });
-    fireEvent.click(screen.getByText("ذخیره"));
+    fireEvent.change(screen.getByLabelText("Manager token"), { target: { value: "token" } });
+    fireEvent.click(screen.getByText("Load rules"));
+    fireEvent.click(await screen.findByText("Edit"));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Updated" } });
+    fireEvent.click(screen.getByText("Save"));
     await waitFor(() => expect(api.PATCH).toHaveBeenCalledWith("/risk-rules/{rule_id}", expect.objectContaining({
       body: expect.objectContaining({ name: "Updated", expected_revision: 1 }),
       headers: { Authorization: "Bearer token" },
     })));
-    expect(await screen.findByText("قانون ذخیره شد.")).toBeInTheDocument();
+    expect(await screen.findByText("Rule saved.")).toBeInTheDocument();
   });
 
   it("rejects invalid JSON without submitting", () => {
     render(<RulesPage />);
-    fireEvent.change(screen.getByLabelText("توکن مدیر"), { target: { value: "token" } });
-    fireEvent.change(screen.getByLabelText("نام"), { target: { value: "Limit" } });
-    fireEvent.change(screen.getByLabelText("پارامترها (JSON)"), { target: { value: "[]" } });
-    fireEvent.click(screen.getByText("ذخیره"));
+    fireEvent.change(screen.getByLabelText("Manager token"), { target: { value: "token" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Limit" } });
+    fireEvent.change(screen.getByLabelText("Parameters (JSON)"), { target: { value: "[]" } });
+    fireEvent.click(screen.getByText("Save"));
     expect(screen.getByRole("status")).toHaveTextContent("JSON");
     expect(api.POST).not.toHaveBeenCalled();
   });
@@ -39,8 +39,8 @@ describe("rule management", () => {
   it("shows server authorization errors", async () => {
     vi.mocked(api.GET).mockResolvedValue({ error: { title: "Forbidden", status: 403 }, response: new Response(null, { status: 403 }) } as never);
     render(<RulesPage />);
-    fireEvent.change(screen.getByLabelText("توکن مدیر"), { target: { value: "token" } });
-    fireEvent.click(screen.getByText("دریافت قوانین"));
+    fireEvent.change(screen.getByLabelText("Manager token"), { target: { value: "token" } });
+    fireEvent.click(screen.getByText("Load rules"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Forbidden");
   });
 });
