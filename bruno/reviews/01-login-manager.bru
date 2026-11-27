@@ -1,0 +1,31 @@
+meta {
+  name: 01 - Obtain Manager JWT (200)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/token/
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "{{managerUsername}}",
+    "password": "{{managerPassword}}"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("manager_access_token", res.getBody().access);
+  }
+}
+
+tests {
+  test("Manager login returns 200 and access token", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().access).to.be.a("string");
+  });
+}
