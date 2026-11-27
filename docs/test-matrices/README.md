@@ -1,16 +1,16 @@
-# ماتریس‌های تست
+# Test matrices
 
-ماتریس تست جدول توافق بر رفتار مورد انتظار قبل از نوشتن یا هنگام بازبینی تست است. سناریو یک وضعیت کلی است؛ هر case با ورودی، پیش‌شرط و نتیجه مشخص، نمونه قابل بررسی آن سناریو است. برای مثال سناریوی «اعتبار مبلغ سقف» شامل caseهای ۰، ۱ و بیشتر از حداکثر است. مقدار مرزی و همسایه‌های آن و ورودی خالی یا نامعتبر را جداگانه بررسی کنید.
+A test matrix records agreed expected behavior before tests are written or during review. A scenario describes a general situation; each case provides a concrete input, precondition, and expected result. For example, a limit validation scenario includes cases for 0, 1, and values above the maximum. Check boundary values, neighboring values, and empty or invalid inputs separately.
 
-ماتریس جای اجرای تست را نمی‌گیرد: برای هر ردیف، نتیجه را با پاسخ API و در صورت لزوم وضعیت دیتابیس مقایسه کنید و در ستون تست خودکار به نام تست واقعی ارجاع دهید. هر عضو می‌تواند فایل `us-XX.md` بسازد، استوری و فرض‌ها را بنویسد و جدول زیر را تکمیل کند. نتیجه‌های نامشخص را با تیم توافق کنید؛ به‌جای حدس زدن آن‌ها را قطعی اعلام نکنید.
+A matrix does not replace test execution. Compare each row with the API response and, where necessary, database state; reference actual test names in the automated test column. Team members can add a `us-XX.md` file with the story, assumptions, and the following table. Agree on uncertain outcomes with the team instead of presenting guesses as decisions.
 
-| شناسه | سناریو و پیش‌شرط | ورودی | نتیجه مورد انتظار | سطح / تست خودکار |
+| ID | Scenario and precondition | Input | Expected result | Level / automated test |
 |---|---|---|---|---|
-| XX-01 | ... | ... | ... | unit / integration / دستی؛ نام تست |
+| XX-01 | ... | ... | ... | Unit / integration / manual; test name |
 
-تست unit رفتار یک جزء، integration همکاری چند جزء مانند API و PostgreSQL، و تست دستی/End-to-End مسیر کاربر را بررسی می‌کند. از داده و محیط آزمایشی استفاده کنید. پس از تغییر قرارداد، این جدول و تست‌ها را به‌روز کنید.
+Unit tests cover individual components, integration tests cover collaboration such as API and PostgreSQL, and manual or end-to-end tests cover user workflows. Use test data and environments. Update the matrix and tests when the contract changes.
 
-- [US-02 مدیریت قوانین](us-02.md)
-- [US-08 توضیح‌پذیری تصمیم، پیش‌نویس](us-08-draft.md)
-- [تست‌های فرانت‌اند](frontend.md)
-- [پیش‌نویس تست مصرف‌کننده دفترکل](ledger-consumer.md)
+- [US-02 risk rule management](us-02.md)
+- [US-08 decision explainability draft](us-08-draft.md)
+- [Frontend tests](frontend.md)
+- [Ledger consumer test draft](ledger-consumer.md)
