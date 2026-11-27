@@ -1,0 +1,23 @@
+meta {
+  name: 15 - Reject Claim on Unknown Review Item ID (404)
+  type: http
+  seq: 16
+}
+
+post {
+  url: {{baseUrl}}/api/v1/manual-review-queue/0192f5a0-0000-7000-8000-999999999999/claim
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operator_access_token}}
+}
+
+tests {
+  test("Unknown item_id returns 404 NOT_FOUND Problem Details", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getHeader("content-type")).to.include("application/problem+json");
+    expect(res.getBody().code).to.equal("NOT_FOUND");
+  });
+}

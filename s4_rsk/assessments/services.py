@@ -17,11 +17,13 @@ from assessments.engine import (
 from assessments.models import (
     DecisionEvent,
     DecisionReason,
+    DecisionType,
     EventType,
     RiskAssessment,
 )
 from common.middleware import get_correlation_id
 from integrations.ledger_client import LedgerClient, LedgerHistory, assess_ledger_history
+from reviews.services import enqueue_review_item
 from rules.selectors import list_active_rules
 
 __all__ = [
@@ -160,6 +162,8 @@ def evaluate_and_persist_assessment(
         rule_snapshot=primary.rule_snapshot,
         correlation_id=correlation_id,
     )
+    if result.decision == DecisionType.REVIEW:
+        enqueue_review_item(assessment=assessment)
 
     return RiskAssessment.objects.prefetch_related("reasons").get(
         decision_id=assessment.decision_id

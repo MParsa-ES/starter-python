@@ -68,6 +68,537 @@ paths:
               schema:
                 $ref: '#/components/schemas/TokenRefresh'
           description: ''
+  /api/v1/blocked-identifiers:
+    get:
+      operationId: listBlockedIdentifiers
+      description: |-
+        GET  /api/v1/blocked-identifiers
+        POST /api/v1/blocked-identifiers
+      summary: List blocked identifiers
+      parameters:
+      - in: header
+        name: X-Correlation-ID
+        schema:
+          type: string
+        description: Optional request trace identifier; generated when absent.
+      - in: query
+        name: active
+        schema:
+          type: boolean
+        description: Filter by active flag.
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Blocked Identifiers
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBlockedIdentifierList'
+          description: ''
+        '400':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '401':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '403':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+    post:
+      operationId: createBlockedIdentifier
+      description: |-
+        GET  /api/v1/blocked-identifiers
+        POST /api/v1/blocked-identifiers
+      summary: Block an IBAN
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+          format: uuid
+        description: UUID for safe POST retries.
+      - in: header
+        name: X-Correlation-ID
+        schema:
+          type: string
+        description: Optional request trace identifier; generated when absent.
+      tags:
+      - Blocked Identifiers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BlockedIdentifierInput'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockedIdentifier'
+          description: ''
+        '400':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '401':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '403':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '409':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+  /api/v1/blocked-identifiers/{identifier_id}:
+    delete:
+      operationId: deactivateBlockedIdentifier
+      description: |-
+        DELETE /api/v1/blocked-identifiers/{id}
+        Deactivates a blocked identifier (soft delete)
+      summary: Deactivate a blocked identifier (soft delete, audit is kept)
+      parameters:
+      - in: header
+        name: X-Correlation-ID
+        schema:
+          type: string
+        description: Optional request trace identifier; generated when absent.
+      - in: path
+        name: identifier_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Blocked Identifiers
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          description: No response body
+        '401':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '403':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '404':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+  /api/v1/manual-review-queue:
+    get:
+      operationId: listManualReviewQueue
+      description: GET /api/v1/manual-review-queue
+      summary: List transactions waiting for a human decision
+      parameters:
+      - in: header
+        name: X-Correlation-ID
+        schema:
+          type: string
+        description: Optional request trace identifier; generated when absent.
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: state
+        schema:
+          type: string
+          enum:
+          - CLAIMED
+          - DECIDED
+          - OPEN
+        description: Filter queue items by state (OPEN, CLAIMED, DECIDED).
+      tags:
+      - Manual Review
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReviewItemList'
+          description: ''
+        '400':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '401':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '403':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+  /api/v1/manual-review-queue/{item_id}/claim:
+    post:
+      operationId: claimReviewItem
+      description: POST /api/v1/manual-review-queue/{item_id}/claim
+      summary: Claim a queue item atomically
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+          format: uuid
+        description: UUID for safe POST retries.
+      - in: header
+        name: X-Correlation-ID
+        schema:
+          type: string
+        description: Optional request trace identifier; generated when absent.
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Manual Review
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewItem'
+          description: ''
+        '400':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '401':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '403':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '404':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '409':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+  /api/v1/manual-review-queue/{item_id}/decision:
+    post:
+      operationId: decideReviewItem
+      description: POST /api/v1/manual-review-queue/{item_id}/decision
+      summary: Final human decision on a claimed item
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+          format: uuid
+        description: UUID for safe POST retries.
+      - in: header
+        name: X-Correlation-ID
+        schema:
+          type: string
+        description: Optional request trace identifier; generated when absent.
+      - in: path
+        name: item_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Manual Review
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDecisionInput'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewItem'
+          description: ''
+        '400':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '401':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '403':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '404':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
+        '409':
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Trace identifier for this response and its logs.
+              required: true
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          description: ''
   /api/v1/risk-assessments:
     post:
       operationId: createRiskAssessment
@@ -424,6 +955,69 @@ paths:
           description: ''
 components:
   schemas:
+    BlockedIdentifier:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Public UUIDv7 identifier for this blocklist entry.
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/KindEnum'
+          readOnly: true
+          default: IBAN
+        value:
+          type: string
+          readOnly: true
+          description: Blocked Iranian IBAN (IR followed by 24 digits).
+        reason:
+          type: string
+          readOnly: true
+          description: Reason for blocking this identifier.
+        active:
+          type: boolean
+          readOnly: true
+          default: true
+        created_by:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deactivated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
+      required:
+      - active
+      - created_at
+      - created_by
+      - deactivated_at
+      - id
+      - kind
+      - reason
+      - value
+    BlockedIdentifierInput:
+      type: object
+      properties:
+        kind:
+          $ref: '#/components/schemas/KindEnum'
+        value:
+          type: string
+          maxLength: 26
+        reason:
+          type: string
+          maxLength: 255
+          minLength: 1
+      required:
+      - kind
+      - reason
+      - value
     DatabaseEnum:
       enum:
       - CONNECTED
@@ -491,6 +1085,47 @@ components:
       - UP
       type: string
       description: '* `UP` - UP'
+    KindEnum:
+      enum:
+      - IBAN
+      type: string
+      description: '* `IBAN` - Iranian IBAN'
+    ManualDecisionEnum:
+      enum:
+      - APPROVE
+      - REJECT
+      type: string
+      description: |-
+        * `APPROVE` - APPROVE
+        * `REJECT` - REJECT
+    PaginatedBlockedIdentifierList:
+      type: object
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockedIdentifier'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+    PaginatedReviewItemList:
+      type: object
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewItem'
+        next_cursor:
+          type:
+          - string
+          - 'null'
     PaginatedRiskRuleList:
       type: object
       required:
@@ -577,6 +1212,55 @@ components:
       - READY
       type: string
       description: '* `READY` - READY'
+    ReviewDecisionInput:
+      type: object
+      properties:
+        decision:
+          $ref: '#/components/schemas/ManualDecisionEnum'
+        reason:
+          type: string
+          maxLength: 255
+          minLength: 1
+      required:
+      - decision
+      - reason
+    ReviewItem:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Public UUIDv7 identifier for this manual review item.
+        decision_id:
+          type: string
+          format: uuid
+          readOnly: true
+        transaction_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: UUID of the transfer under review (denormalized from RiskAssessment).
+        state:
+          allOf:
+          - $ref: '#/components/schemas/StateEnum'
+          readOnly: true
+        claimed_by:
+          type:
+          - string
+          - 'null'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - claimed_by
+      - created_at
+      - decision_id
+      - item_id
+      - state
+      - transaction_id
     RiskAssessmentDetailResponse:
       type: object
       description: |-
@@ -812,6 +1496,16 @@ components:
       - before
       - changed_at
       - revision
+    StateEnum:
+      enum:
+      - OPEN
+      - CLAIMED
+      - DECIDED
+      type: string
+      description: |-
+        * `OPEN` - Open
+        * `CLAIMED` - Claimed
+        * `DECIDED` - Decided
     StatisticsResponse:
       type: object
       properties:
